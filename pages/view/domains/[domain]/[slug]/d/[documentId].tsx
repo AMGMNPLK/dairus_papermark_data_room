@@ -198,8 +198,13 @@ export async function getStaticProps(context: GetStaticPropsContext) {
       .parse(slugParam);
     const documentId = z.string().cuid().parse(documentIdParam);
 
+    // Use a relative URL to avoid dependency on NEXTAUTH_URL
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : process.env.NEXTAUTH_URL || 'http://localhost:3000';
+
     const res = await fetch(
-      `${process.env.NEXTAUTH_URL}/api/links/domains/${encodeURIComponent(
+      `${baseUrl}/api/links/domains/${encodeURIComponent(
         domain,
       )}/${encodeURIComponent(slug)}/documents/${documentId}`,
     );

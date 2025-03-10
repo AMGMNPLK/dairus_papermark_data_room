@@ -62,8 +62,14 @@ export const getStaticProps = async (context: GetStaticPropsContext) => {
       .regex(/^[a-zA-Z0-9_-]+$/, "Invalid path parameter")
       .parse(slugParam);
 
+    // Fetch the link
+    // Use a relative URL to avoid dependency on NEXTAUTH_URL
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : process.env.NEXTAUTH_URL || 'http://localhost:3000';
+
     const res = await fetch(
-      `${process.env.NEXTAUTH_URL}/api/links/domains/${encodeURIComponent(
+      `${baseUrl}/api/links/domains/${encodeURIComponent(
         domain,
       )}/${encodeURIComponent(slug)}`,
     );
