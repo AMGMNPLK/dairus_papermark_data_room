@@ -12,6 +12,8 @@ import { CustomUser } from "@/lib/types";
  * GET /api/ai/store/teams/[teamId]
  * Get team vector store information
  */
+export const dynamic = "force-dynamic";
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { teamId: string } },

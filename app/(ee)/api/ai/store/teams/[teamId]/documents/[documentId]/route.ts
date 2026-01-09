@@ -19,6 +19,8 @@ import { CustomUser } from "@/lib/types";
  * Index a single document into the team vector store
  * Returns runId for status tracking via polling
  */
+export const dynamic = "force-dynamic";
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { documentId: string; teamId: string } },

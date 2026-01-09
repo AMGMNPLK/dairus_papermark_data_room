@@ -18,6 +18,8 @@ import { CustomUser } from "@/lib/types";
  * Index all documents in a dataroom into its vector store
  * Returns batch runIds for status tracking via polling
  */
+export const dynamic = "force-dynamic";
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { dataroomId: string; teamId: string } },
