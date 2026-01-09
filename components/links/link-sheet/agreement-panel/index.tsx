@@ -9,6 +9,14 @@ import {
 import { useTeam } from "@/context/team-context";
 import { toast } from "sonner";
 import { mutate } from "swr";
+import { z } from "zod";
+
+import {
+  DocumentData,
+  createAgreementDocument,
+} from "@/lib/documents/create-document";
+import { putFile } from "@/lib/files/put-file";
+import { getSupportedContentType } from "@/lib/utils/get-content-type";
 
 import DocumentUpload from "@/components/document-upload";
 import { Button } from "@/components/ui/button";
@@ -23,34 +31,85 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-
-import {
-  DocumentData,
-  createAgreementDocument,
-} from "@/lib/documents/create-document";
-import { putFile } from "@/lib/files/put-file";
-import { getSupportedContentType } from "@/lib/utils/get-content-type";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import LinkItem from "../link-item";
 
+// Add the validation schema
+const agreementUrlSchema = z
+  .string()
+  .min(1, "URL is required")
+  .url("Please enter a valid URL")
+  .refine((url) => url.startsWith("https://"), {
+    message: "URL must start with https://",
+  });
+
 export default function AgreementSheet({
+  defaultData,
   isOpen,
   setIsOpen,
+  isOnlyView = false,
+  onClose,
 }: {
+  defaultData?: { name: string; link: string; requireName: boolean; contentType?: string; textContent?: string } | null;
   isOpen: boolean;
   setIsOpen: Dispatch<SetStateAction<boolean>>;
+  isOnlyView?: boolean;
+  onClose?: () => void;
 }) {
   const teamInfo = useTeam();
   const teamId = teamInfo?.currentTeam?.id;
-  const [data, setData] = useState({ name: "", link: "", requireName: true });
+  const [data, setData] = useState({ 
+    name: "", 
+    link: "", 
+    textContent: "",
+    contentType: "LINK",
+    requireName: true 
+  });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
-  const [currentLink, setCurrentLink] = useState<string | null>(null);
+
+  // Add validation state
+  const [urlError, setUrlError] = useState<string>("");
+  const [isUrlValid, setIsUrlValid] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (defaultData) {
+      setData({
+        name: defaultData?.name || "",
+        link: defaultData?.link || "",
+        textContent: defaultData?.textContent || "",
+        contentType: defaultData?.contentType || "LINK",
+        requireName: defaultData?.requireName || true,
+      });
+    }
+  }, [defaultData]);
+
+  const handleClose = (open: boolean) => {
+    setIsOpen(open);
+    setData({ 
+      name: "", 
+      link: "", 
+      textContent: "",
+      contentType: "LINK",
+      requireName: true 
+    });
+    setCurrentFile(null);
+    setIsLoading(false);
+    if (onClose) {
+      onClose();
+    }
+  };
 
   const handleBrowserUpload = async () => {
     // event.preventDefault();
     // event.stopPropagation();
-
+    if (isOnlyView) {
+      handleClose(false);
+      toast.error("Cannot upload file in view mode!");
+      return;
+    }
     // Check if the file is chosen
     if (!currentFile) {
       toast.error("Please select a file to upload.");
@@ -109,30 +168,81 @@ export default function AgreementSheet({
     }
   };
 
+  // Add URL validation function
+  const validateUrl = (url: string) => {
+    if (!url.trim()) {
+      setUrlError("");
+      setIsUrlValid(true);
+      return;
+    }
+
+    try {
+      agreementUrlSchema.parse(url);
+      setUrlError("");
+      setIsUrlValid(true);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const firstError = error.errors[0];
+        setUrlError(firstError?.message || "Invalid URL");
+        setIsUrlValid(false);
+      }
+    }
+  };
+
+  // Modify handleSubmit to include validation
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     e.stopPropagation();
 
+    if (isOnlyView) {
+      handleClose(false);
+      toast.error("Agreement cannot be created in view mode");
+      return;
+    }
+
+    // Validate based on content type
+    if (data.contentType === "LINK") {
+      // Validate URL
+      try {
+        agreementUrlSchema.parse(data.link);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          const firstError = error.errors[0];
+          toast.error(firstError?.message || "Please enter a valid URL");
+          return;
+        }
+      }
+    } else if (data.contentType === "TEXT") {
+      // Validate text content
+      if (!data.textContent.trim()) {
+        toast.error("Please enter agreement text content");
+        return;
+      }
+    }
+
     setIsLoading(true);
 
     try {
+      const submitData = {
+        name: data.name,
+        contentType: data.contentType,
+        content: data.contentType === "LINK" ? data.link : data.textContent,
+        requireName: data.requireName,
+      };
+
       const response = await fetch(`/api/teams/${teamId}/agreements`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...data,
-        }),
+        body: JSON.stringify(submitData),
       });
 
       if (!response.ok) {
-        // handle error with toast message
         toast.error("Error creating agreement");
         return;
       }
 
-      // Update the agreements list
       mutate(`/api/teams/${teamId}/agreements`);
     } catch (error) {
       console.error(error);
@@ -140,7 +250,13 @@ export default function AgreementSheet({
     } finally {
       setIsLoading(false);
       setIsOpen(false);
-      setData({ name: "", link: "", requireName: true });
+      setData({ 
+        name: "", 
+        link: "", 
+        textContent: "",
+        contentType: "LINK",
+        requireName: true 
+      });
     }
   };
 
@@ -151,13 +267,16 @@ export default function AgreementSheet({
   }, [currentFile]);
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+    <Sheet open={isOpen} onOpenChange={handleClose}>
       <SheetContent className="flex h-full w-[85%] flex-col justify-between bg-background px-4 text-foreground sm:w-[500px] md:px-5">
         <SheetHeader className="text-start">
-          <SheetTitle>Create a new agreement</SheetTitle>
+          <SheetTitle>
+            {isOnlyView ? "View Agreement" : "Create a new agreement"}
+          </SheetTitle>
           <SheetDescription>
-            An agreement is a special document that visitors must accept before
-            accessing your link. You can create a new agreement here.
+            {isOnlyView
+              ? "View the details of this agreement."
+              : "An agreement is a special document that visitors must accept before accessing your link. You can create a new agreement here."}
           </SheetDescription>
         </SheetHeader>
 
@@ -182,6 +301,7 @@ export default function AgreementSheet({
                       name: e.target.value,
                     })
                   }
+                  disabled={isOnlyView}
                 />
               </div>
 
@@ -192,56 +312,135 @@ export default function AgreementSheet({
                   action={() =>
                     setData({ ...data, requireName: !data.requireName })
                   }
+                  isAllowed={!isOnlyView}
                 />
               </div>
 
               <div className="space-y-4">
+                {/* Content Type Selection */}
                 <div className="w-full space-y-2">
-                  <Label htmlFor="link">Link to an agreement</Label>
-                  <Input
-                    className="flex w-full rounded-md border-0 bg-background py-1.5 text-foreground shadow-sm ring-1 ring-inset ring-input placeholder:text-muted-foreground focus:ring-2 focus:ring-inset focus:ring-gray-400 sm:text-sm sm:leading-6"
-                    id="link"
-                    type="url"
-                    pattern="https://.*"
-                    name="link"
-                    required
-                    autoComplete="off"
-                    data-1p-ignore
-                    placeholder="https://www.papermark.com/nda"
-                    value={data.link || ""}
-                    onChange={(e) =>
-                      setData({
-                        ...data,
-                        link: e.target.value,
-                      })
-                    }
-                    onInvalid={(e) =>
-                      e.currentTarget.setCustomValidity(
-                        "Please enter a valid URL starting with https://",
-                      )
-                    }
-                  />
+                  <Label>Agreement Content Type</Label>
+                  <RadioGroup 
+                    value={data.contentType} 
+                    onValueChange={(value) => setData({...data, contentType: value})}
+                    disabled={isOnlyView}
+                    className="flex flex-col space-y-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="LINK" id="link-type" />
+                      <Label htmlFor="link-type">Link to agreement document</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="TEXT" id="text-type" />
+                      <Label htmlFor="text-type">Text content</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
 
-                <div className="space-y-12">
-                  <div className="space-y-2 pb-6">
-                    <Label>Or upload an agreement</Label>
-                    <div className="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
-                      <DocumentUpload
-                        currentFile={currentFile}
-                        setCurrentFile={setCurrentFile}
-                      />
+                {/* Link Content */}
+                {data.contentType === "LINK" && (
+                  <div className="w-full space-y-2">
+                    <Label htmlFor="link">Link to an agreement</Label>
+                    <Input
+                      className={`flex w-full rounded-md border-0 bg-background py-1.5 text-foreground shadow-sm ring-1 ring-inset placeholder:text-muted-foreground focus:ring-2 focus:ring-inset sm:text-sm sm:leading-6 ${
+                        !isUrlValid
+                          ? "ring-red-500 focus:ring-red-500"
+                          : "ring-input focus:ring-gray-400"
+                      }`}
+                      id="link"
+                      type="text"
+                      name="link"
+                      required={data.contentType === "LINK"}
+                      autoComplete="off"
+                      data-1p-ignore
+                      placeholder="https://www.papermark.com/nda"
+                      value={data.link || ""}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setData({
+                          ...data,
+                          link: newValue,
+                        });
+                        validateUrl(newValue);
+                      }}
+                      onBlur={(e) => {
+                        validateUrl(e.target.value);
+                      }}
+                      disabled={isOnlyView}
+                    />
+                    {urlError && (
+                      <p className="mt-1 text-sm text-red-500">{urlError}</p>
+                    )}
+
+                    {!isOnlyView && (
+                      <div className="space-y-12">
+                        <div className="space-y-2 pb-6">
+                          <Label>Or upload an agreement</Label>
+                          <div className="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
+                            <DocumentUpload
+                              currentFile={currentFile}
+                              setCurrentFile={setCurrentFile}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Text Content */}
+                {data.contentType === "TEXT" && (
+                  <div className="w-full space-y-2">
+                    <Label htmlFor="textContent">Agreement Text</Label>
+                    <Textarea
+                      className="flex w-full rounded-md border-0 bg-background py-1.5 text-foreground shadow-sm ring-1 ring-inset ring-input placeholder:text-muted-foreground focus:ring-2 focus:ring-inset focus:ring-gray-400 sm:text-sm sm:leading-6"
+                      id="textContent"
+                      name="textContent"
+                      required={data.contentType === "TEXT"}
+                      placeholder="By accessing this document, you agree to maintain confidentiality of all information contained herein and not to share, copy, or distribute any content without prior written consent..."
+                      value={data.textContent || ""}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          textContent: e.target.value,
+                        })
+                      }
+                      disabled={isOnlyView}
+                      rows={6}
+                      maxLength={1500}
+                    />
+                    <div className="flex justify-between text-xs">
+                      <p className="text-muted-foreground">
+                        This text will be displayed to users as a compliance agreement before they can access the content.
+                      </p>
+                      <p className={`${data.textContent.length > 1400 ? 'text-orange-500' : 'text-muted-foreground'} ${data.textContent.length >= 1500 ? 'text-red-500 font-semibold' : ''}`}>
+                        {data.textContent.length}/1500
+                      </p>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
-
-            <SheetFooter className="flex-shrink-0">
+            <SheetFooter
+              className={`flex-shrink-0 ${isOnlyView ? "mt-6" : ""}`}
+            >
               <div className="flex items-center">
-                <Button type="submit" loading={isLoading}>
-                  Create Agreement
-                </Button>
+                {isOnlyView ? (
+                  <Button type="button" onClick={() => handleClose(false)}>
+                    Close
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    loading={isLoading}
+                    disabled={
+                      (data.contentType === "LINK" && !isUrlValid && data.link.trim() !== "") ||
+                      (data.contentType === "TEXT" && !data.textContent.trim())
+                    }
+                  >
+                    Create Agreement
+                  </Button>
+                )}
               </div>
             </SheetFooter>
           </form>

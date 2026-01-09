@@ -25,7 +25,7 @@ import { Label } from "@/components/ui/label";
 import { useAnalytics } from "@/lib/analytics";
 import { usePlan } from "@/lib/swr/use-billing";
 
-import { UpgradePlanModal } from "../billing/upgrade-plan-modal";
+import { UpgradePlanModalWithDiscount } from "../billing/upgrade-plan-modal-with-discount";
 
 export function AddFolderModal({
   // open,
@@ -65,11 +65,12 @@ export function AddFolderModal({
     }),
   });
 
+  const validation = addFolderSchema.safeParse({ name: folderName });
+
   const handleSubmit = async (event: any) => {
     event.preventDefault();
     event.stopPropagation();
 
-    const validation = addFolderSchema.safeParse({ name: folderName });
     if (!validation.success) {
       toast.error(validation.error.errors[0].message);
       return;
@@ -128,21 +129,23 @@ export function AddFolderModal({
       toast.error("Error adding folder. Please try again.");
       return;
     } finally {
+      setFolderName("");
       setLoading(false);
       setOpen(false);
     }
   };
 
   // If the team is on a free plan, show the upgrade modal
-  if (isFree && (!isDataroom || !isTrial)) {
+  if (isFree && !isTrial) {
     if (children) {
       return (
-        <UpgradePlanModal
+        <UpgradePlanModalWithDiscount
           clickedPlan={PlanEnum.Pro}
           trigger={"add_folder_button"}
+          highlightItem={["folder", "multi-file"]}
         >
           {children}
-        </UpgradePlanModal>
+        </UpgradePlanModalWithDiscount>
       );
     }
   }
@@ -166,7 +169,12 @@ export function AddFolderModal({
             onChange={(e) => setFolderName(e.target.value)}
           />
           <DialogFooter>
-            <Button type="submit" className="h-9 w-full">
+            <Button
+              type="submit"
+              className="h-9 w-full"
+              disabled={!validation.success}
+              loading={loading}
+            >
               Add new folder
             </Button>
           </DialogFooter>

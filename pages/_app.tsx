@@ -5,14 +5,14 @@ import Head from "next/head";
 import { TeamProvider } from "@/context/team-context";
 import type { Session } from "next-auth";
 import { SessionProvider } from "next-auth/react";
-import PlausibleProvider from "next-plausible";
+import { NuqsAdapter } from "nuqs/adapters/next/pages";
+
+import { EXCLUDED_PATHS } from "@/lib/constants";
 
 import { PostHogCustomProvider } from "@/components/providers/posthog-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-
-import { EXCLUDED_PATHS } from "@/lib/constants";
 
 import "@/styles/globals.css";
 
@@ -73,10 +73,7 @@ export default function App({
       <SessionProvider session={session}>
         <PostHogCustomProvider>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-            <PlausibleProvider
-              domain="papermark.io"
-              enabled={process.env.NEXT_PUBLIC_VERCEL_ENV === "production"}
-            >
+            <NuqsAdapter>
               <main className={inter.className}>
                 <Toaster closeButton />
                 <TooltipProvider delayDuration={100}>
@@ -89,7 +86,7 @@ export default function App({
                   )}
                 </TooltipProvider>
               </main>
-            </PlausibleProvider>
+            </NuqsAdapter>
           </ThemeProvider>
         </PostHogCustomProvider>
       </SessionProvider>

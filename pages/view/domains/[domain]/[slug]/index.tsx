@@ -3,13 +3,16 @@ import { useRouter } from "next/router";
 
 import { useEffect, useState } from "react";
 
+import WorkflowAccessView from "@/ee/features/workflows/components/workflow-access-view";
 import NotFound from "@/pages/404";
 import { Brand, DataroomBrand } from "@prisma/client";
 import Cookies from "js-cookie";
 import { useSession } from "next-auth/react";
 import { ExtendedRecordMap } from "notion-types";
 import { parsePageId } from "notion-utils";
+import z from "zod";
 
+import { getFeatureFlags } from "@/lib/featureFlags";
 import notion from "@/lib/notion";
 import {
   CustomUser,
@@ -35,16 +38,35 @@ type DataroomLinkData = {
   brand: DataroomBrand | null;
 };
 
+type WorkflowLinkData = {
+  linkType: "WORKFLOW_LINK";
+  entryLinkId: string;
+  domain: string;
+  slug: string;
+  brand: Brand | null;
+};
+
 export const getStaticProps = async (context: GetStaticPropsContext) => {
-  const { domain, slug } = context.params as { domain: string; slug: string };
+  const { domain: domainParam, slug: slugParam } = context.params as {
+    domain: string;
+    slug: string;
+  };
 
   try {
+    const domain = z
+      .string()
+      .regex(/^([a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/)
+      .parse(domainParam);
+    const slug = z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]+$/, "Invalid path parameter")
+      .parse(slugParam);
+
     // Fetch the link
     // Use a relative URL to avoid dependency on NEXTAUTH_URL
     const baseUrl = process.env.VERCEL_URL 
       ? `https://${process.env.VERCEL_URL}` 
       : process.env.NEXTAUTH_URL || 'http://localhost:3000';
-      
     const res = await fetch(
       `${baseUrl}/api/links/domains/${encodeURIComponent(
         domain,
@@ -53,11 +75,50 @@ export const getStaticProps = async (context: GetStaticPropsContext) => {
     if (!res.ok) {
       throw new Error(`Failed to fetch: ${res.status}`);
     }
-    const { linkType, link, brand } = (await res.json()) as
-      | DocumentLinkData
-      | DataroomLinkData;
+    const responseData = (await res.json()) as any;
+    const { linkType, link, brand, linkId } = responseData;
 
-    if (!link || !linkType) {
+    if (!linkType) {
+      return {
+        notFound: true,
+      };
+    }
+
+    // Handle workflow links - minimal props needed
+    if (linkType === "WORKFLOW_LINK") {
+      return {
+        props: {
+          linkData: {
+            linkType: "WORKFLOW_LINK",
+            entryLinkId: linkId || "",
+            domain,
+            slug,
+            brand: brand || null,
+          },
+          notionData: {
+            rootNotionPageId: null,
+            recordMap: null,
+            theme: null,
+          },
+          meta: {
+            enableCustomMetatag: false,
+            metaTitle: null,
+            metaDescription: null,
+            metaImage: null,
+            metaUrl: `https://${domain}/${slug}`,
+            metaFavicon: "/favicon.ico",
+          },
+          showPoweredByBanner: false,
+          showAccountCreationSlide: false,
+          useAdvancedExcelViewer: false,
+          useCustomAccessForm: false,
+          logoOnAccessForm: false,
+        },
+        revalidate: 60,
+      };
+    }
+
+    if (!link) {
       return {
         notFound: true,
       };
@@ -95,11 +156,10 @@ export const getStaticProps = async (context: GetStaticPropsContext) => {
             linkType: "DOCUMENT_LINK",
             link: {
               ...link,
+              teamId: teamId || null,
               document: {
                 ...linkDocument,
                 versions: [versionWithoutTypeAndFile],
-                // TODO: remove this once the assistant feature is re-enabled
-                assistantEnabled: false,
               },
             },
             brand,
@@ -122,7 +182,11 @@ export const getStaticProps = async (context: GetStaticPropsContext) => {
           useCustomAccessForm:
             teamId === "cm0154tiv0000lr2t6nr5c6kp" ||
             teamId === "clup33by90000oewh4rfvp2eg" ||
-            teamId === "cm76hfyvy0002q623hmen99pf",
+            teamId === "cm76hfyvy0002q623hmen99pf" ||
+            teamId === "cm9ztf0s70005js04i689gefn",
+          logoOnAccessForm:
+            teamId === "cm7nlkrhm0000qgh0nvyrrywr" ||
+            teamId === "clup33by90000oewh4rfvp2eg",
         },
         revalidate: 10,
       };
@@ -133,7 +197,7 @@ export const getStaticProps = async (context: GetStaticPropsContext) => {
       // iterate the link.documents and extract type and file and rest of the props
       let documents = [];
       for (const document of link.dataroom.documents) {
-        const { file, ...versionWithoutTypeAndFile } =
+        const { file, updatedAt, ...versionWithoutTypeAndFile } =
           document.document.versions[0];
 
         const newDocument = {
@@ -141,7 +205,14 @@ export const getStaticProps = async (context: GetStaticPropsContext) => {
           dataroomDocumentId: document.id,
           folderId: document.folderId,
           orderIndex: document.orderIndex,
-          versions: [versionWithoutTypeAndFile],
+          hierarchicalIndex: document.hierarchicalIndex,
+          versions: [
+            {
+              ...versionWithoutTypeAndFile,
+              updatedAt:
+                document.updatedAt > updatedAt ? document.updatedAt : updatedAt, // use the latest updatedAt
+            },
+          ],
         };
 
         documents.push(newDocument);
@@ -149,16 +220,31 @@ export const getStaticProps = async (context: GetStaticPropsContext) => {
 
       const { teamId } = link.dataroom;
 
+      // Check if dataroomIndex feature flag is enabled
+      const featureFlags = await getFeatureFlags({ teamId });
+      const dataroomIndexEnabled = featureFlags.dataroomIndex;
+
+      const lastUpdatedAt = link.dataroom.documents.reduce(
+        (max: number, doc: any) => {
+          return Math.max(
+            max,
+            new Date(doc.document.versions[0].updatedAt).getTime(),
+          );
+        },
+        new Date(link.dataroom.createdAt).getTime(),
+      );
+
       return {
         props: {
           linkData: {
             linkType: "DATAROOM_LINK",
             link: {
               ...link,
+              teamId: teamId || null,
               dataroom: {
                 ...link.dataroom,
                 documents,
-                lastUpdatedAt: null, // TODO: fix this to get the actual lastUpdatedAt
+                lastUpdatedAt: lastUpdatedAt,
               },
             },
             brand,
@@ -176,14 +262,20 @@ export const getStaticProps = async (context: GetStaticPropsContext) => {
           useAdvancedExcelViewer: false, // INFO: this is managed in the API route
           useCustomAccessForm:
             teamId === "cm0154tiv0000lr2t6nr5c6kp" ||
+            teamId === "clup33by90000oewh4rfvp2eg" ||
+            teamId === "cm76hfyvy0002q623hmen99pf" ||
+            teamId === "cm9ztf0s70005js04i689gefn",
+          logoOnAccessForm:
+            teamId === "cm7nlkrhm0000qgh0nvyrrywr" ||
             teamId === "clup33by90000oewh4rfvp2eg",
+          dataroomIndexEnabled,
         },
         revalidate: 10,
       };
     }
   } catch (error) {
     console.error("Fetching error:", error);
-    return { notFound: true };
+    return { props: { error: true }, revalidate: 30 };
   }
 };
 
@@ -201,8 +293,11 @@ export default function ViewPage({
   showAccountCreationSlide,
   useAdvancedExcelViewer,
   useCustomAccessForm,
+  logoOnAccessForm,
+  dataroomIndexEnabled,
+  error,
 }: {
-  linkData: DocumentLinkData | DataroomLinkData;
+  linkData: DocumentLinkData | DataroomLinkData | WorkflowLinkData;
   notionData: {
     rootNotionPageId: string | null;
     recordMap: ExtendedRecordMap | null;
@@ -219,6 +314,9 @@ export default function ViewPage({
   showAccountCreationSlide: boolean;
   useAdvancedExcelViewer: boolean;
   useCustomAccessForm: boolean;
+  logoOnAccessForm: boolean;
+  dataroomIndexEnabled?: boolean;
+  error?: boolean;
 }) {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -246,6 +344,12 @@ export default function ViewPage({
     );
   }
 
+  if (error) {
+    return (
+      <NotFound message="Sorry, we had trouble loading this link. Please try again in a moment." />
+    );
+  }
+
   const {
     email: verifiedEmail,
     d: disableEditEmail,
@@ -257,10 +361,36 @@ export default function ViewPage({
     previewToken?: string;
     preview?: string;
   };
-  const { linkType, link, brand } = linkData;
+  const { linkType } = linkData;
+
+  // Render workflow access view for WORKFLOW_LINK
+  if (linkType === "WORKFLOW_LINK") {
+    const { entryLinkId, domain, slug, brand } = linkData as WorkflowLinkData;
+
+    return (
+      <>
+        <CustomMetaTag
+          favicon={meta.metaFavicon}
+          enableBranding={false}
+          title="Access Workflow | Powered by Papermark"
+          description={null}
+          imageUrl={null}
+          url={meta.metaUrl ?? ""}
+        />
+        <WorkflowAccessView
+          entryLinkId={entryLinkId}
+          domain={domain}
+          slug={slug}
+          brand={brand}
+        />
+      </>
+    );
+  }
 
   // Render the document view for DOCUMENT_LINK
   if (linkType === "DOCUMENT_LINK") {
+    const { link, brand } = linkData as DocumentLinkData;
+
     if (!link || status === "loading") {
       return (
         <>
@@ -268,9 +398,7 @@ export default function ViewPage({
             favicon={meta.metaFavicon}
             enableBranding={meta.enableCustomMetatag ?? false}
             title={
-              meta.metaTitle ??
-              `${link?.document?.name} | Powered by Papermark` ??
-              "Document powered by Papermark"
+              meta.metaTitle ?? `${link?.document?.name} | Powered by Papermark`
             }
             description={meta.metaDescription ?? null}
             imageUrl={meta.metaImage ?? null}
@@ -313,9 +441,7 @@ export default function ViewPage({
           favicon={meta.metaFavicon}
           enableBranding={meta.enableCustomMetatag ?? false}
           title={
-            meta.metaTitle ??
-            `${link?.document?.name} | Powered by Papermark` ??
-            "Document powered by Papermark"
+            meta.metaTitle ?? `${link?.document?.name} | Powered by Papermark`
           }
           description={meta.metaDescription ?? null}
           imageUrl={meta.metaImage ?? null}
@@ -335,6 +461,7 @@ export default function ViewPage({
           useCustomAccessForm={useCustomAccessForm}
           token={storedToken}
           verifiedEmail={verifiedEmail}
+          logoOnAccessForm={logoOnAccessForm}
         />
       </>
     );
@@ -342,6 +469,8 @@ export default function ViewPage({
 
   // Render the dataroom view for DATAROOM_LINK
   if (linkType === "DATAROOM_LINK") {
+    const { link, brand } = linkData as DataroomLinkData;
+
     if (!link || status === "loading" || router.isFallback) {
       return (
         <>
@@ -349,9 +478,7 @@ export default function ViewPage({
             favicon={meta.metaFavicon}
             enableBranding={meta.enableCustomMetatag ?? false}
             title={
-              meta.metaTitle ??
-              `${link?.dataroom?.name} | Powered by Papermark` ??
-              "Dataroom powered by Papermark"
+              meta.metaTitle ?? `${link?.dataroom?.name} | Powered by Papermark`
             }
             description={meta.metaDescription ?? null}
             imageUrl={meta.metaImage ?? null}
@@ -395,9 +522,7 @@ export default function ViewPage({
           favicon={meta.metaFavicon}
           enableBranding={meta.enableCustomMetatag ?? false}
           title={
-            meta.metaTitle ??
-            `${link?.dataroom?.name} | Powered by Papermark` ??
-            "Dataroom powered by Papermark"
+            meta.metaTitle ?? `${link?.dataroom?.name} | Powered by Papermark`
           }
           description={meta.metaDescription ?? null}
           imageUrl={meta.metaImage ?? null}
@@ -415,6 +540,8 @@ export default function ViewPage({
           verifiedEmail={verifiedEmail}
           previewToken={previewToken}
           preview={!!preview}
+          logoOnAccessForm={logoOnAccessForm}
+          dataroomIndexEnabled={dataroomIndexEnabled}
         />
       </>
     );

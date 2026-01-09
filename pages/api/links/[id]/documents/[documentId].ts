@@ -5,6 +5,7 @@ import { DataroomBrand, LinkAudienceType } from "@prisma/client";
 import { fetchDataroomDocumentLinkData } from "@/lib/api/links/link-data";
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
+import { checkGlobalBlockList } from "@/lib/utils/global-block-list";
 
 export default async function handle(
   req: NextApiRequest,
@@ -34,11 +35,13 @@ export default async function handle(
         enableScreenshotProtection: true,
         password: true,
         isArchived: true,
+        deletedAt: true,
         enableCustomMetatag: true,
         metaTitle: true,
         metaDescription: true,
         metaImage: true,
         metaFavicon: true,
+        welcomeMessage: true,
         enableQuestion: true,
         linkType: true,
         feedback: {
@@ -53,12 +56,14 @@ export default async function handle(
         enableWatermark: true,
         watermarkConfig: true,
         groupId: true,
+        permissionGroupId: true,
         audienceType: true,
         dataroomId: true,
         teamId: true,
         team: {
           select: {
             plan: true,
+            globalBlockList: true,
           },
         },
         customFields: {
@@ -83,8 +88,24 @@ export default async function handle(
       return res.status(404).json({ error: "Link not found" });
     }
 
+    if (link.deletedAt) {
+      return res.status(404).json({ error: "Link has been deleted" });
+    }
+
     if (link.isArchived) {
       return res.status(404).json({ error: "Link is archived" });
+    }
+
+    const { email } = req.query as { email?: string };
+    const globalBlockCheck = checkGlobalBlockList(
+      email,
+      link.team?.globalBlockList,
+    );
+    if (globalBlockCheck.error) {
+      return res.status(400).json({ message: globalBlockCheck.error });
+    }
+    if (globalBlockCheck.isBlocked) {
+      return res.status(403).json({ message: "Access denied" });
     }
 
     let brand: Partial<DataroomBrand> | null = null;
@@ -94,13 +115,12 @@ export default async function handle(
       linkId: id,
       teamId: link.teamId!,
       dataroomDocumentId: dataroomDocumentId,
+      permissionGroupId: link.permissionGroupId || undefined,
       ...(link.audienceType === LinkAudienceType.GROUP &&
         link.groupId && {
           groupId: link.groupId,
         }),
     });
-
-    console.log("data documents", data.linkData.dataroom?.documents[0]);
 
     linkData = data.linkData;
     brand = data.brand;
@@ -115,6 +135,7 @@ export default async function handle(
         customFields: [], // reset custom fields for free plan
         enableAgreement: false,
         enableWatermark: false,
+        permissionGroupId: null,
       }),
     };
 

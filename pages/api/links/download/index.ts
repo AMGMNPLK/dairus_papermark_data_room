@@ -1,15 +1,24 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { LinkType } from "@prisma/client";
+
 import { getFile } from "@/lib/files/get-file";
+import { notifyDocumentDownload } from "@/lib/integrations/slack/events";
 import prisma from "@/lib/prisma";
+import { getFileNameWithPdfExtension } from "@/lib/utils";
 import { getIpAddress } from "@/lib/utils/ip";
+
+// This function can run for a maximum of 300 seconds
+export const config = {
+  maxDuration: 300,
+};
 
 export default async function handle(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
   if (req.method === "POST") {
-    // GET /api/links/download
+    // POST /api/links/download
     const { linkId, viewId } = req.body as { linkId: string; viewId: string };
 
     try {
@@ -24,9 +33,11 @@ export default async function handle(
           viewerEmail: true,
           link: {
             select: {
+              linkType: true,
               allowDownload: true,
               expiresAt: true,
               isArchived: true,
+              deletedAt: true,
               enableWatermark: true,
               watermarkConfig: true,
               name: true,
@@ -34,8 +45,10 @@ export default async function handle(
           },
           document: {
             select: {
+              id: true,
               teamId: true,
               downloadOnly: true,
+              name: true,
               versions: {
                 where: { isPrimary: true },
                 select: {
@@ -58,13 +71,18 @@ export default async function handle(
         return res.status(404).json({ error: "Error downloading" });
       }
 
-      // if link does not allow download, we should not allow the download
-      if (!view.link.allowDownload && !view.document?.downloadOnly) {
+      // if document is downloadOnly, always allow. Otherwise, check link settings.
+      if (!view.document?.downloadOnly && !view.link.allowDownload) {
         return res.status(403).json({ error: "Error downloading" });
       }
 
       // if link is archived, we should not allow the download
       if (view.link.isArchived) {
+        return res.status(403).json({ error: "Error downloading" });
+      }
+
+      // if link is deleted, we should not allow the download
+      if (view.link.deletedAt) {
         return res.status(403).json({ error: "Error downloading" });
       }
 
@@ -78,10 +96,12 @@ export default async function handle(
         return res.status(403).json({ error: "Error downloading" });
       }
 
-      // if viewedAt is longer than 30 mins ago, we should not allow the download
+      // if viewedAt is longer than 30 mins ago, we should not allow the download for document links and 23 hours ago for dataroom links
       if (
-        view.viewedAt &&
-        view.viewedAt < new Date(Date.now() - 30 * 60 * 1000)
+        (view.link.linkType === LinkType.DOCUMENT_LINK &&
+          view.viewedAt < new Date(Date.now() - 30 * 60 * 1000)) ||
+        (view.link.linkType === LinkType.DATAROOM_LINK &&
+          view.viewedAt < new Date(Date.now() - 23 * 60 * 60 * 1000))
       ) {
         return res.status(403).json({ error: "Error downloading" });
       }
@@ -92,17 +112,42 @@ export default async function handle(
         data: { downloadedAt: new Date() },
       });
 
+      if (view.document?.teamId) {
+        try {
+          await notifyDocumentDownload({
+            teamId: view.document.teamId,
+            documentId: view.document.id,
+            dataroomId: undefined,
+            linkId,
+            viewerEmail: view.viewerEmail ?? undefined,
+            viewerId: undefined,
+          });
+        } catch (error) {
+          console.error("Error sending Slack notification:", error);
+        }
+      }
+
+      // get the file to be downloaded, if watermark is enabled and document is not pdf, then get the pdf file, otherwise return the original file
+      // if watermark is enabled and watermark config is present and document version is pdf, then get the file
+      // if watermark is not enabled, then get the original file
+      const file =
+        view.link.enableWatermark &&
+        view.link.watermarkConfig &&
+        view.document!.versions[0].type === "pdf"
+          ? view.document!.versions[0].file
+          : (view.document!.versions[0].originalFile ??
+            view.document!.versions[0].file);
+
       const downloadUrl = await getFile({
         type: view.document!.versions[0].storageType,
-        data:
-          view.document!.versions[0].originalFile ??
-          view.document!.versions[0].file,
+        data: file,
         isDownload: true,
       });
 
       if (
         view.document!.versions[0].type === "pdf" &&
-        view.link.enableWatermark
+        view.link.enableWatermark &&
+        view.link.watermarkConfig
       ) {
         const response = await fetch(
           `${process.env.NEXTAUTH_URL}/api/mupdf/annotate-document`,
@@ -110,24 +155,44 @@ export default async function handle(
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.INTERNAL_API_KEY}`,
             },
             body: JSON.stringify({
               url: downloadUrl,
               numPages: view.document!.versions[0].numPages,
               watermarkConfig: view.link.watermarkConfig,
+              originalFileName: view.document!.name,
               viewerData: {
                 email: view.viewerEmail,
-                date: new Date(view.viewedAt).toLocaleDateString(),
+                date: new Date(
+                  view.viewedAt ? view.viewedAt : new Date(),
+                ).toLocaleDateString(),
                 ipAddress: getIpAddress(req.headers),
                 link: view.link.name,
-                time: new Date(view.viewedAt).toLocaleTimeString(),
+                time: new Date(
+                  view.viewedAt ? view.viewedAt : new Date(),
+                ).toLocaleTimeString(),
               },
             }),
           },
         );
 
         if (!response.ok) {
-          return res.status(500).json({ error: "Error downloading" });
+          // Try to get the specific error details from the watermarking API
+          let errorMessage = "Error downloading";
+          try {
+            const errorData = await response.json();
+            if (errorData.error && errorData.details) {
+              errorMessage = `${errorData.error}: ${errorData.details}`;
+            } else if (errorData.error) {
+              errorMessage = errorData.error;
+            }
+          } catch {
+            // If we can't parse the error response, use generic message
+            errorMessage = "Error downloading";
+          }
+
+          return res.status(500).json({ error: errorMessage });
         }
 
         const pdfBuffer = await response.arrayBuffer();
@@ -136,10 +201,11 @@ export default async function handle(
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
           "Content-Disposition",
-          'attachment; filename="watermarked.pdf"',
+          `attachment; filename="${encodeURIComponent(getFileNameWithPdfExtension(view.document!.name))}"`,
         );
+        res.setHeader("Content-Length", Buffer.from(pdfBuffer).length);
 
-        // Send the buffer directly
+        // Send the watermarked buffer directly
         return res.send(Buffer.from(pdfBuffer));
       }
 

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { useState } from "react";
 
 import { useTeam } from "@/context/team-context";
@@ -20,6 +22,10 @@ import {
 import { toast } from "sonner";
 import { mutate } from "swr";
 
+import { usePlan } from "@/lib/swr/use-billing";
+import { useDocumentVisits } from "@/lib/swr/use-document";
+import { durationFormat, timeAgo } from "@/lib/utils";
+
 import ChevronDown from "@/components/shared/icons/chevron-down";
 import {
   Collapsible,
@@ -36,13 +42,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TimestampTooltip } from "@/components/ui/timestamp-tooltip";
 import { BadgeTooltip } from "@/components/ui/tooltip";
 
-import { usePlan } from "@/lib/swr/use-billing";
-import { useDocumentVisits } from "@/lib/swr/use-document";
-import { durationFormat, timeAgo } from "@/lib/utils";
-
-import { UpgradePlanModal } from "../billing/upgrade-plan-modal";
+import { UpgradePlanModalWithDiscount } from "../billing/upgrade-plan-modal-with-discount";
+import { Pagination } from "../documents/pagination";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -52,14 +56,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "../ui/pagination";
 import { VisitorAvatar } from "./visitor-avatar";
 import VisitorChart from "./visitor-chart";
 import VisitorClicks from "./visitor-clicks";
@@ -78,14 +74,22 @@ export default function VisitorsTable({
   const teamInfo = useTeam();
   const teamId = teamInfo?.currentTeam?.id;
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const limit = 10; // Set the number of items per page
+  const [pageSize, setPageSize] = useState<number>(10);
 
-  const { views, mutate: mutateViews } = useDocumentVisits(currentPage, limit);
-  const { plan } = usePlan();
+  const { views, mutate: mutateViews } = useDocumentVisits(
+    currentPage,
+    pageSize,
+  );
+  const { plan, isTrial, isPaused } = usePlan();
   const isFreePlan = plan === "free";
 
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+  };
 
   const handleArchiveView = async (
     viewId: string,
@@ -137,8 +141,8 @@ export default function VisitorsTable({
           <TableHeader>
             <TableRow className="*:whitespace-nowrap *:font-medium hover:bg-transparent">
               <TableHead>Name</TableHead>
-              <TableHead>Visit Duration</TableHead>
-              <TableHead>Visit Completion</TableHead>
+              <TableHead>View Duration</TableHead>
+              <TableHead>View Completion</TableHead>
               <TableHead>Last Viewed</TableHead>
               <TableHead className="text-center sm:text-right"></TableHead>
             </TableRow>
@@ -149,11 +153,62 @@ export default function VisitorsTable({
                 <TableRow>
                   <TableCell colSpan={5}>
                     <div className="flex h-40 w-full items-center justify-center">
-                      <p>No Data Available</p>
+                      <p>No views yet. Try sharing a link.</p>
                     </div>
                   </TableCell>
                 </TableRow>
               )}
+            {views?.hiddenViewCount! > 0 && (
+              <>
+                <TableRow className="">
+                  <TableCell colSpan={5} className="text-left sm:text-center">
+                    {isPaused &&
+                    views?.hiddenFromPause &&
+                    views.hiddenFromPause > 0 ? (
+                      // Show pause-specific message if team is paused and has hidden views from pause
+                      <div className="flex flex-col items-start justify-center gap-2 sm:flex-row sm:items-center">
+                        <span className="flex items-center gap-x-1">
+                          <AlertTriangleIcon className="inline-block h-4 w-4 text-orange-500" />
+                          {views.hiddenFromPause} visit
+                          {views.hiddenFromPause !== 1 ? "s" : ""} occurred
+                          after your team was paused and{" "}
+                          {views.hiddenFromPause !== 1 ? "are" : "is"}{" "}
+                          hidden.{" "}
+                        </span>
+                        <Link
+                          href="/settings/billing"
+                          className="font-medium text-orange-600 underline hover:text-orange-700"
+                        >
+                          Unpause subscription to see all visits
+                        </Link>
+                      </div>
+                    ) : (
+                      // Show regular free plan message
+                      <div className="flex flex-col items-start justify-center gap-1 sm:flex-row sm:items-center">
+                        <span className="flex items-center gap-x-1">
+                          <AlertTriangleIcon className="inline-block h-4 w-4 text-yellow-500" />
+                          Some older visits may not be shown because your
+                          document has more than 20 views.{" "}
+                        </span>
+                        <UpgradePlanModalWithDiscount
+                          clickedPlan={
+                            isTrial ? PlanEnum.Business : PlanEnum.Pro
+                          }
+                          trigger=""
+                        >
+                          <button className="underline hover:text-gray-800">
+                            Upgrade to see full history
+                          </button>
+                        </UpgradePlanModalWithDiscount>
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+                {Array.from({ length: views?.hiddenViewCount! }).map((_, i) => (
+                  <VisitorBlurred key={i} />
+                ))}
+              </>
+            )}
             {views?.viewsWithDuration ? (
               views.viewsWithDuration.map((view) => {
                 if (view.isArchived) {
@@ -173,13 +228,20 @@ export default function VisitorsTable({
                             <div className="focus:outline-none">
                               <p className="flex items-center gap-x-2 overflow-visible text-sm font-medium text-gray-800 dark:text-gray-200">
                                 {view.viewerEmail ? (
-                                  <>{view.viewerEmail}</>
+                                  <>{view.viewerName || view.viewerEmail}</>
                                 ) : (
                                   "Anonymous"
                                 )}
                               </p>
+                              {view.viewerName && view.viewerEmail && (
+                                <p className="text-xs text-muted-foreground/60">
+                                  {view.viewerEmail}
+                                </p>
+                              )}
                               <p className="text-xs text-muted-foreground/60 sm:text-sm">
-                                {view.link.name ? view.link.name : view.linkId}
+                                {view.link && view.link.name
+                                  ? view.link.name
+                                  : view.linkId}
                               </p>
                             </div>
                           </div>
@@ -203,9 +265,18 @@ export default function VisitorsTable({
                       </TableCell>
                       {/* Last Viewed */}
                       <TableCell className="text-sm text-muted-foreground">
-                        <time dateTime={new Date(view.viewedAt).toISOString()}>
-                          {timeAgo(view.viewedAt)}
-                        </time>
+                        <TimestampTooltip
+                          timestamp={view.viewedAt}
+                          side="right"
+                          rows={["local", "utc", "unix"]}
+                        >
+                          <time
+                            className="select-none"
+                            dateTime={new Date(view.viewedAt).toISOString()}
+                          >
+                            {timeAgo(view.viewedAt)}
+                          </time>
+                        </TimestampTooltip>
                       </TableCell>
 
                       {/* Actions */}
@@ -264,11 +335,11 @@ export default function VisitorsTable({
                                   <p className="flex items-center gap-x-2 overflow-visible text-sm font-medium text-gray-800 dark:text-gray-200">
                                     {view.viewerEmail ? (
                                       <>
-                                        {view.viewerEmail}{" "}
+                                        {view.viewerName || view.viewerEmail}{" "}
                                         {view.verified && (
                                           <BadgeTooltip
                                             content="Verified visitor"
-                                            key="verified"
+                                            key={`verified-${view.id}`}
                                           >
                                             <BadgeCheckIcon className="h-4 w-4 text-emerald-500 hover:text-emerald-600" />
                                           </BadgeTooltip>
@@ -276,7 +347,7 @@ export default function VisitorsTable({
                                         {view.internal && (
                                           <BadgeTooltip
                                             content="Internal visitor"
-                                            key="internal"
+                                            key={`internal-${view.id}`}
                                           >
                                             <BadgeInfoIcon className="h-4 w-4 text-blue-500 hover:text-blue-600" />
                                           </BadgeTooltip>
@@ -284,7 +355,7 @@ export default function VisitorsTable({
                                         {view.agreementResponse && (
                                           <BadgeTooltip
                                             content={`Agreed to ${view.agreementResponse.agreement.name}`}
-                                            key="nda-agreement"
+                                            key={`agreement-${view.id}`}
                                           >
                                             <FileBadgeIcon className="h-4 w-4 text-emerald-500 hover:text-emerald-600" />
                                           </BadgeTooltip>
@@ -292,7 +363,7 @@ export default function VisitorsTable({
                                         {view.downloadedAt && (
                                           <BadgeTooltip
                                             content={`Downloaded ${timeAgo(view.downloadedAt)}`}
-                                            key="download"
+                                            key={`download-${view.id}`}
                                           >
                                             <DownloadCloudIcon className="h-4 w-4 text-cyan-500 hover:text-cyan-600" />
                                           </BadgeTooltip>
@@ -300,7 +371,7 @@ export default function VisitorsTable({
                                         {view.dataroomId && (
                                           <BadgeTooltip
                                             content={`Dataroom Visitor`}
-                                            key="download"
+                                            key={`dataroom-${view.id}`}
                                           >
                                             <ServerIcon className="h-4 w-4 text-[#fb7a00] hover:text-[#fb7a00]/90" />
                                           </BadgeTooltip>
@@ -308,7 +379,7 @@ export default function VisitorsTable({
                                         {view.feedbackResponse && (
                                           <BadgeTooltip
                                             content={`${view.feedbackResponse.data.question}: ${view.feedbackResponse.data.answer}`}
-                                            key="feedback"
+                                            key={`feedback-${view.id}`}
                                           >
                                             {view.feedbackResponse.data
                                               .answer === "yes" ? (
@@ -323,8 +394,13 @@ export default function VisitorsTable({
                                       "Anonymous"
                                     )}
                                   </p>
+                                  {view.viewerName && view.viewerEmail && (
+                                    <p className="text-xs text-muted-foreground/60">
+                                      {view.viewerEmail}
+                                    </p>
+                                  )}
                                   <p className="text-xs text-muted-foreground/60 sm:text-sm">
-                                    {view.link.name
+                                    {view.link && view.link.name
                                       ? view.link.name
                                       : view.linkId}
                                   </p>
@@ -350,11 +426,18 @@ export default function VisitorsTable({
                           </TableCell>
                           {/* Last Viewed */}
                           <TableCell className="text-sm text-muted-foreground">
-                            <time
-                              dateTime={new Date(view.viewedAt).toISOString()}
+                            <TimestampTooltip
+                              timestamp={view.viewedAt}
+                              side="right"
+                              rows={["local", "utc", "unix"]}
                             >
-                              {timeAgo(view.viewedAt)}
-                            </time>
+                              <time
+                                className="select-none"
+                                dateTime={new Date(view.viewedAt).toISOString()}
+                              >
+                                {timeAgo(view.viewedAt)}
+                              </time>
+                            </TimestampTooltip>
                           </TableCell>
 
                           {/* Actions */}
@@ -435,9 +518,14 @@ export default function VisitorsTable({
                                   viewId={view.id}
                                   totalPages={view.versionNumPages}
                                   versionNumber={view.versionNumber}
+                                  downloadType={view.downloadType}
+                                  downloadMetadata={
+                                    view.downloadMetadata as any
+                                  }
                                 />
                               )}
-                              {!isFreePlan && primaryVersion.type === "pdf" ? (
+                              {(!isFreePlan && primaryVersion.type === "pdf") ||
+                              primaryVersion.type === "link" ? (
                                 <VisitorClicks
                                   teamId={view.teamId!}
                                   documentId={view.documentId!}
@@ -468,88 +556,28 @@ export default function VisitorsTable({
                 </TableCell>
               </TableRow>
             )}
-            {views?.hiddenViewCount! > 0 && (
-              <>
-                <TableRow className="">
-                  <TableCell colSpan={5} className="text-left sm:text-center">
-                    <div className="flex flex-col items-start justify-center gap-1 sm:flex-row sm:items-center">
-                      <span className="flex items-center gap-x-1">
-                        <AlertTriangleIcon className="inline-block h-4 w-4 text-yellow-500" />
-                        Some older visits may not be shown because your document
-                        has more than 20 views.{" "}
-                      </span>
-                      <UpgradePlanModal clickedPlan={PlanEnum.Pro} trigger="">
-                        <button className="underline hover:text-gray-800">
-                          Upgrade to see full history
-                        </button>
-                      </UpgradePlanModal>
-                    </div>
-                  </TableCell>
-                </TableRow>
-                {Array.from({ length: views?.hiddenViewCount! }).map((_, i) => (
-                  <VisitorBlurred key={i} />
-                ))}
-              </>
-            )}
           </TableBody>
         </Table>
       </div>
-      {/* Pagination Controls */}
-      <div className="mt-2 flex w-full items-center">
-        <div className="w-full text-sm">
-          Showing{" "}
-          <span className="font-semibold">
-            {views?.totalViews && views?.totalViews > 10
-              ? 10
-              : views?.totalViews}
-          </span>{" "}
-          of {views?.totalViews} visits
-        </div>
-        <Pagination className="justify-end">
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                onClick={() => setCurrentPage(currentPage - 1)}
-                disabled={currentPage === 1}
-              />
-            </PaginationItem>
-            {currentPage !== 1 ? (
-              <PaginationItem>
-                <PaginationLink onClick={() => setCurrentPage(1)}>
-                  {1}
-                </PaginationLink>
-              </PaginationItem>
-            ) : null}
-
-            <PaginationItem>
-              <PaginationLink isActive>{currentPage}</PaginationLink>
-            </PaginationItem>
-
-            {views?.totalViews &&
-            currentPage !== Math.ceil(views?.totalViews / 10) ? (
-              <PaginationItem>
-                <PaginationLink
-                  onClick={() =>
-                    setCurrentPage(Math.ceil(views?.totalViews / 10))
-                  }
-                >
-                  {Math.ceil(views?.totalViews / 10)}
-                </PaginationLink>
-              </PaginationItem>
-            ) : null}
-            <PaginationItem>
-              <PaginationNext
-                onClick={() => setCurrentPage(currentPage + 1)}
-                disabled={
-                  views?.totalViews
-                    ? currentPage === Math.ceil(views?.totalViews / 10)
-                    : true
-                }
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      </div>
+      <Pagination
+        itemName="visits"
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalItems={views?.totalViews || 0}
+        totalPages={
+          views?.totalViews ? Math.ceil(views.totalViews / pageSize) : 0
+        }
+        onPageChange={setCurrentPage}
+        onPageSizeChange={handlePageSizeChange}
+        totalShownItems={
+          views?.totalViews
+            ? Math.min(
+                pageSize,
+                views.totalViews - (currentPage - 1) * pageSize,
+              )
+            : 0
+        }
+      />
     </div>
   );
 }

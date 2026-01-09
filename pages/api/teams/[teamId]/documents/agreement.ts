@@ -1,16 +1,15 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
-import { DocumentStorageType } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
 
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
-import { getTeamWithUsersAndDocument } from "@/lib/team/helper";
 import { convertFilesToPdfTask } from "@/lib/trigger/convert-files";
 import { convertPdfToImageRoute } from "@/lib/trigger/pdf-to-image-route";
 import { CustomUser } from "@/lib/types";
-import { getExtension, log } from "@/lib/utils";
+import { getExtension, log, serializeFileSize } from "@/lib/utils";
 import { conversionQueue } from "@/lib/utils/trigger-utils";
+import { documentUploadSchema } from "@/lib/zod/url-validation";
 
 import { authOptions } from "../../../auth/[...nextauth]";
 
@@ -30,35 +29,51 @@ export default async function handle(
 
     const userId = (session.user as CustomUser).id;
 
-    // Assuming data is an object with `name` and `description` properties
+    // Validate request body using Zod schema for security
+    const validationResult = await documentUploadSchema.safeParseAsync({
+      ...req.body,
+      // Ensure type field is provided for validation
+      type: req.body.type || getExtension(req.body.name),
+    });
+
+    if (!validationResult.success) {
+      log({
+        message: `Agreement document validation failed for teamId: ${teamId}. Errors: ${JSON.stringify(validationResult.error.errors)}`,
+        type: "error",
+      });
+      return res.status(400).json({
+        error: "Invalid agreement document data",
+        details: validationResult.error.errors,
+      });
+    }
+
     const {
       name,
       url: fileUrl,
       storageType,
       numPages,
-      type: fileType,
+      type,
       folderPathName,
       fileSize,
       contentType,
-    } = req.body as {
-      name: string;
-      url: string;
-      storageType: DocumentStorageType;
-      numPages?: number;
-      type?: string;
-      folderPathName?: string;
-      fileSize?: number;
-      contentType: string;
-    };
+    } = validationResult.data;
 
     try {
-      const { team } = await getTeamWithUsersAndDocument({
-        teamId,
-        userId,
+      const team = await prisma.team.findUnique({
+        where: {
+          id: teamId,
+          users: {
+            some: {
+              userId,
+            },
+          },
+        },
+        select: { plan: true },
       });
 
-      // Get passed type property or alternatively, the file extension and save it as the type
-      const type = fileType || getExtension(name);
+      if (!team) {
+        return res.status(401).end("Unauthorized");
+      }
 
       const folder = await prisma.folder.findUnique({
         where: {
@@ -80,7 +95,7 @@ export default async function handle(
           file: fileUrl,
           originalFile: fileUrl,
           contentType,
-          type: type,
+          type,
           storageType,
           ownerId: (session.user as CustomUser).id,
           teamId: teamId,
@@ -97,7 +112,7 @@ export default async function handle(
           versions: {
             create: {
               file: fileUrl,
-              type: type,
+              type,
               storageType,
               originalFile: fileUrl,
               contentType,
@@ -156,7 +171,7 @@ export default async function handle(
         );
       }
 
-      return res.status(201).json(document);
+      return res.status(201).json(serializeFileSize(document));
     } catch (error) {
       log({
         message: `Failed to create document. \n\n*teamId*: _${teamId}_, \n\n*file*: ${fileUrl} \n\n ${error}`,

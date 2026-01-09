@@ -1,13 +1,29 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
 import { getServerSession } from "next-auth/next";
+import { z } from "zod";
 
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
+import { validateContent } from "@/lib/utils/sanitize-html";
 
 import { authOptions } from "../../../auth/[...nextauth]";
+
+// Zod schema for agreement creation
+const createAgreementSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(150, "Name must be less than 150 characters"),
+  content: z
+    .string()
+    .min(1, "Content is required")
+    .max(1500, "Content must be less than 1500 characters"),
+  contentType: z.enum(["LINK", "TEXT"]).default("LINK"),
+  requireName: z.boolean().default(false),
+});
 
 export default async function handle(
   req: NextApiRequest,
@@ -34,7 +50,19 @@ export default async function handle(
           },
         },
         select: {
-          agreements: true,
+          agreements: {
+            include: {
+              _count: {
+                select: {
+                  links: {
+                    where: {
+                      deletedAt: null,
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       });
 
@@ -78,17 +106,26 @@ export default async function handle(
         return res.status(401).json("Unauthorized");
       }
 
-      const { name, link, requireName } = req.body as {
-        name: string;
-        link: string;
-        requireName: boolean;
-      };
+      // Validate and parse request body
+      const parseResult = createAgreementSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({
+          error: "Invalid request body",
+          details: parseResult.error.flatten().fieldErrors,
+        });
+      }
+
+      const { name, content, contentType, requireName } = parseResult.data;
+
+      // Sanitize content using existing sanitization logic
+      const sanitizedContent = validateContent(content, 1500);
 
       const agreement = await prisma.agreement.create({
         data: {
           teamId,
-          name,
-          content: link,
+          name: name.trim(),
+          content: sanitizedContent,
+          contentType: contentType || "LINK",
           requireName,
         },
       });

@@ -7,13 +7,17 @@ export const FADE_IN_ANIMATION_SETTINGS = {
 
 export const STAGGER_CHILD_VARIANTS = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.4, type: "spring" } },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, type: "spring" as const },
+  },
 };
 
 export const PAPERMARK_HEADERS = {
   headers: {
     "x-powered-by":
-      "Papermark.io - Document sharing infrastructure for the modern web",
+      "Papermark - Secure Data Room Infrastructure for the modern web",
   },
 };
 
@@ -66,13 +70,20 @@ export const SUPPORTED_DOCUMENT_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
   "application/vnd.ms-excel.sheet.macroEnabled.12", // .xlsm
   "text/csv", // .csv
+  "text/tab-separated-values", // .tsv
   "application/vnd.oasis.opendocument.spreadsheet", // .ods
   "application/vnd.ms-powerpoint", // .ppt
   "application/vnd.openxmlformats-officedocument.presentationml.presentation", // .pptx
   "application/vnd.oasis.opendocument.presentation", // .odp
+  "application/vnd.apple.keynote", // .key
+  "application/x-iwork-keynote-sffkey", // .key (older format)
   "application/msword", // .doc
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
   "application/vnd.oasis.opendocument.text", // .odt
+  "application/rtf", // .rtf
+  "text/rtf", // .rtf
+  "text/plain", // .txt
+  "text/markdown", // .md
   "image/vnd.dwg", // .dwg
   "image/vnd.dxf", // .dxf
   "image/png", // .png
@@ -85,13 +96,83 @@ export const SUPPORTED_DOCUMENT_MIME_TYPES = [
   "video/x-msvideo", // .avi
   "video/webm", // .webm
   "video/ogg", // .ogg
+  "audio/mp4", // .m4a
+  "audio/x-m4a", // .m4a (older MIME type)
+  "audio/m4a", // .m4a (alternative MIME type)
+  "audio/mpeg", // .mp3
   "application/vnd.google-earth.kml+xml", // .kml
   "application/vnd.google-earth.kmz", // .kmz
+  "application/vnd.ms-outlook", // .msg
 ];
+
+// Upload configurations for different plan types and contexts
+export const FREE_PLAN_ACCEPTED_FILE_TYPES = {
+  "application/pdf": [], // ".pdf"
+  "application/vnd.ms-excel": [], // ".xls"
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [], // ".xlsx"
+  "text/csv": [], // ".csv"
+  "application/vnd.oasis.opendocument.spreadsheet": [], // ".ods"
+  "image/png": [], // ".png"
+  "image/jpeg": [], // ".jpeg"
+  "image/jpg": [], // ".jpg"
+};
+
+export const FULL_PLAN_ACCEPTED_FILE_TYPES = {
+  "application/pdf": [], // ".pdf"
+  "application/vnd.ms-excel": [], // ".xls"
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [], // ".xlsx"
+  "application/vnd.ms-excel.sheet.macroEnabled.12": [".xlsm"], // ".xlsm"
+  "text/csv": [], // ".csv"
+  "text/tab-separated-values": [".tsv"], // ".tsv"
+  "application/vnd.oasis.opendocument.spreadsheet": [], // ".ods"
+  "application/vnd.ms-powerpoint": [], // ".ppt"
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+    [], // ".pptx"
+  "application/vnd.oasis.opendocument.presentation": [], // ".odp"
+  "application/vnd.apple.keynote": [".key"], // ".key"
+  "application/x-iwork-keynote-sffkey": [".key"], // ".key"
+  "application/msword": [], // ".doc"
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [], // ".docx"
+  "application/vnd.oasis.opendocument.text": [], // ".odt"
+  "application/rtf": [], // ".rtf"
+  "text/rtf": [], // ".rtf"
+  "text/plain": [], // ".txt"
+  "image/vnd.dwg": [".dwg"], // ".dwg"
+  "image/vnd.dxf": [".dxf"], // ".dxf"
+  "image/png": [], // ".png"
+  "image/jpeg": [], // ".jpeg"
+  "image/jpg": [], // ".jpg"
+  "application/zip": [], // ".zip"
+  "application/x-zip-compressed": [], // ".zip"
+  "video/mp4": [".mp4"], // ".mp4"
+  "video/quicktime": [".mov"], // ".mov"
+  "video/x-msvideo": [".avi"], // ".avi"
+  "video/webm": [".webm"], // ".webm"
+  "video/ogg": [".ogg"], // ".ogg"
+  "audio/mp4": [".m4a"], // ".m4a"
+  "audio/x-m4a": [".m4a"], // ".m4a"
+  "audio/m4a": [".m4a"], // ".m4a"
+  "audio/mpeg": [".mp3"], // ".mp3"
+  "application/vnd.google-earth.kml+xml": [".kml"], // ".kml"
+  "application/vnd.google-earth.kmz": [".kmz"], // ".kmz"
+  "application/vnd.ms-outlook": [".msg"], // ".msg"
+};
+
+export const VIEWER_ACCEPTED_FILE_TYPES = {
+  "application/pdf": [], // ".pdf"
+  "application/vnd.ms-excel": [], // ".xls"
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [], // ".xlsx"
+  "text/csv": [], // ".csv"
+  "application/vnd.oasis.opendocument.spreadsheet": [], // ".ods"
+  "image/jpeg": [], // ".jpg"
+  "image/png": [], // ".png"
+  "image/jpg": [], // ".jpg"
+};
 
 export const SUPPORTED_DOCUMENT_SIMPLE_TYPES = [
   "pdf",
   "notion",
+  "link",
   "sheet",
   "slides",
   "docs",
@@ -100,6 +181,7 @@ export const SUPPORTED_DOCUMENT_SIMPLE_TYPES = [
   "zip",
   "video",
   "map",
+  "email",
 ] as const;
 
 export const VIDEO_EVENT_TYPES = [
@@ -412,3 +494,5 @@ export const EU_COUNTRY_CODES = [
   "SI",
   "SK",
 ];
+
+export const SYSTEM_FILES = [".DS_Store", "Thumbs.db", "node_modules"];

@@ -7,7 +7,11 @@ import { useTheme } from "next-themes";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 
-import { SUPPORTED_DOCUMENT_MIME_TYPES } from "@/lib/constants";
+import {
+  FREE_PLAN_ACCEPTED_FILE_TYPES,
+  FULL_PLAN_ACCEPTED_FILE_TYPES,
+  SUPPORTED_DOCUMENT_MIME_TYPES,
+} from "@/lib/constants";
 import { usePlan } from "@/lib/swr/use-billing";
 import useLimits from "@/lib/swr/use-limits";
 import { bytesToSize } from "@/lib/utils";
@@ -29,71 +33,30 @@ export default function DocumentUpload({
   const { theme, systemTheme } = useTheme();
   const isLight =
     theme === "light" || (theme === "system" && systemTheme === "light");
-  const { plan, trial } = usePlan();
+  const { isFree, isTrial } = usePlan();
   const { limits } = useLimits();
-  const isFreePlan = plan === "free";
-  const isTrial = !!trial;
-  // const maxSize = isFreePlan && !isTrial ? 30 : 100;
-  const maxNumPages = isFreePlan && !isTrial ? 100 : 500;
 
   // Get file size limits
   const fileSizeLimits = useMemo(
     () =>
       getFileSizeLimits({
         limits,
-        isFreePlan,
+        isFree,
         isTrial,
       }),
-    [limits, isFreePlan, isTrial],
+    [limits, isFree, isTrial],
   );
 
   const { getRootProps, getInputProps } = useDropzone({
     accept:
-      isFreePlan && !isTrial
-        ? {
-            "application/pdf": [], // ".pdf"
-            "application/vnd.ms-excel": [], // ".xls"
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-              [], // ".xlsx"
-            "text/csv": [], // ".csv"
-            "application/vnd.oasis.opendocument.spreadsheet": [], // ".ods"
-            "image/png": [], // ".png"
-            "image/jpeg": [], // ".jpeg"
-            "image/jpg": [], // ".jpg"
-          }
-        : {
-            "application/pdf": [], // ".pdf"
-            "application/vnd.ms-excel": [], // ".xls"
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-              [], // ".xlsx"
-            "application/vnd.ms-excel.sheet.macroEnabled.12": [".xlsm"], // ".xlsm"
-            "text/csv": [], // ".csv"
-            "application/vnd.oasis.opendocument.spreadsheet": [], // ".ods"
-            "application/vnd.ms-powerpoint": [], // ".ppt"
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-              [], // ".pptx"
-            "application/vnd.oasis.opendocument.presentation": [], // ".odp"
-            "application/msword": [], // ".doc"
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-              [], // ".docx"
-            "application/vnd.oasis.opendocument.text": [], // ".odt"
-            "image/vnd.dwg": [".dwg"], // ".dwg"
-            "image/vnd.dxf": [".dxf"], // ".dxf"
-            "image/png": [], // ".png"
-            "image/jpeg": [], // ".jpeg"
-            "image/jpg": [], // ".jpg"
-            "application/zip": [], // ".zip"
-            "application/x-zip-compressed": [], // ".zip"
-            "video/mp4": [], // ".mp4"
-            "video/quicktime": [], // ".mov"
-            "video/x-msvideo": [], // ".avi"
-            "video/webm": [], // ".webm"
-            "video/ogg": [], // ".ogg"
-            "application/vnd.google-earth.kml+xml": [".kml"], // ".kml"
-            "application/vnd.google-earth.kmz": [".kmz"], // ".kmz"
-          },
+      isFree && !isTrial
+        ? FREE_PLAN_ACCEPTED_FILE_TYPES
+        : FULL_PLAN_ACCEPTED_FILE_TYPES,
     multiple: false,
     onDropAccepted: (acceptedFiles) => {
+      if (acceptedFiles.length === 0) {
+        return;
+      }
       const file = acceptedFiles[0];
       const fileType = file.type;
       const fileSizeLimitMB = getFileSizeLimit(fileType, fileSizeLimits); // in MB
@@ -101,12 +64,12 @@ export default function DocumentUpload({
 
       if (file.size > fileSizeLimit) {
         const message = `File size too big for ${fileType} (max. ${fileSizeLimitMB} MB)`;
-        if (isFreePlan && !isTrial) {
+        if (isFree && !isTrial) {
           toast.error(message, {
             description: "Upgrade to a paid plan to increase the limit",
             action: {
               label: "Upgrade",
-              onClick: () => router.push("/settings/upgrade"),
+              onClick: () => router.push("/settings/upgrade-holiday-offer"),
             },
             duration: 10000,
           });
@@ -124,8 +87,10 @@ export default function DocumentUpload({
         .arrayBuffer()
         .then((buffer) => {
           getPagesCount(buffer).then((numPages) => {
-            if (numPages > maxNumPages) {
-              toast.error(`File has too many pages (max. ${maxNumPages})`);
+            if (numPages > fileSizeLimits.maxPages) {
+              toast.error(
+                `File has too many pages (max. ${fileSizeLimits.maxPages})`,
+              );
             } else {
               setCurrentFile(file);
             }
@@ -142,12 +107,12 @@ export default function DocumentUpload({
       if (errors[0].code === "file-too-large") {
         const fileSizeLimitMB = getFileSizeLimit(file.type, fileSizeLimits);
         message = `File size too big (max. ${fileSizeLimitMB} MB)`;
-        if (isFreePlan && !isTrial) {
+        if (isFree && !isTrial) {
           toast.error(message, {
             description: "Upgrade to a paid plan to increase the limit",
             action: {
               label: "Upgrade",
-              onClick: () => router.push("/settings/upgrade"),
+              onClick: () => router.push("/settings/upgrade-holiday-offer"),
             },
             duration: 10000,
           });
@@ -156,12 +121,12 @@ export default function DocumentUpload({
       } else if (errors[0].code === "file-invalid-type") {
         const isSupported = SUPPORTED_DOCUMENT_MIME_TYPES.includes(file.type);
         message = "File type not supported";
-        if (isFreePlan && !isTrial && isSupported) {
+        if (isFree && !isTrial && isSupported) {
           toast.error(`${message} on free plan`, {
             description: `Upgrade to a paid plan to upload ${file.type} files`,
             action: {
               label: "Upgrade",
-              onClick: () => router.push("/settings/upgrade"),
+              onClick: () => router.push("/settings/upgrade-holiday-offer"),
             },
             duration: 10000,
           });
@@ -225,9 +190,9 @@ export default function DocumentUpload({
             <p className="text-xs leading-5 text-gray-500">
               {currentFile
                 ? "Replace file?"
-                : isFreePlan && !isTrial
-                  ? `Only *.pdf, *.xls, *.xlsx, *.csv, *.ods, *.png, *.jpeg, *.jpg`
-                  : `Only *.pdf, *.pptx, *.docx, *.xlsx, *.xls, *.xlsm, *.csv, *.ods, *.ppt, *.odp, *.doc, *.odt, *.dwg, *.dxf, *.png, *.jpg, *.jpeg, *.mp4, *.mov, *.avi, *.webm, *.ogg`}
+                : isFree && !isTrial
+                  ? `Only *.pdf, *.xls, *.xlsx, *.csv, *.tsv, *.ods, *.png, *.jpeg, *.jpg`
+                  : `Only *.pdf, *.pptx, *.docx, *.xlsx, *.xls, *.xlsm, *.csv, *.tsv, *.ods, *.ppt, *.odp, *.doc, *.odt, *.rtf, *txt, *.dwg, *.dxf, *.png, *.jpg, *.jpeg, *.mp4, *.mov, *.avi, *.webm, *.ogg`}
             </p>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useRouter } from "next/router";
 
 import { useState } from "react";
@@ -15,6 +16,7 @@ import {
 } from "@tanstack/react-table";
 import { format } from "date-fns";
 import {
+  AlertTriangleIcon,
   BadgeCheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -25,8 +27,11 @@ import {
 import { toast } from "sonner";
 import useSWR from "swr";
 
+import { usePlan } from "@/lib/swr/use-billing";
+import { durationFormat, fetcher, timeAgo } from "@/lib/utils";
+import { downloadCSV } from "@/lib/utils/csv";
+
 import { Button } from "@/components/ui/button";
-import { Gauge } from "@/components/ui/gauge";
 import {
   Table,
   TableBody,
@@ -39,11 +44,7 @@ import { BadgeTooltip } from "@/components/ui/tooltip";
 import { DataTablePagination } from "@/components/visitors/data-table-pagination";
 import { VisitorAvatar } from "@/components/visitors/visitor-avatar";
 
-import { usePlan } from "@/lib/swr/use-billing";
-import { durationFormat, fetcher, timeAgo } from "@/lib/utils";
-import { downloadCSV } from "@/lib/utils/csv";
-
-import { UpgradePlanModal } from "../billing/upgrade-plan-modal";
+import { UpgradeButton } from "../ui/upgrade-button";
 
 interface Visitor {
   email: string;
@@ -53,6 +54,7 @@ interface Visitor {
   uniqueDocuments: number;
   verified: boolean;
   totalDuration: number;
+  viewerName?: string | null;
 }
 
 const columns: ColumnDef<Visitor>[] = [
@@ -65,13 +67,18 @@ const columns: ColumnDef<Visitor>[] = [
         <div className="min-w-0 flex-1">
           <div className="focus:outline-none">
             <p className="flex items-center gap-x-2 overflow-visible text-sm font-medium text-gray-800 dark:text-gray-200">
-              {row.original.email}{" "}
+              {row.original.viewerName || row.original.email}{" "}
               {row.original.verified && (
                 <BadgeTooltip content="Verified visitor">
                   <BadgeCheckIcon className="h-4 w-4 text-emerald-500 hover:text-emerald-600" />
                 </BadgeTooltip>
               )}
             </p>
+            {row.original.viewerName && row.original.email && (
+              <p className="text-xs text-muted-foreground/60">
+                {row.original.email}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               {row.original.uniqueDocuments} document
               {row.original.uniqueDocuments !== 1 ? "s" : ""} viewed
@@ -216,13 +223,13 @@ export default function VisitorsTable({
 }) {
   const router = useRouter();
   const teamInfo = useTeam();
-  const { isTrial, isFree } = usePlan();
+  const { isTrial, isFree, isPaused } = usePlan();
   const { interval = "7d" } = router.query;
   const [sorting, setSorting] = useState<SortingState>([
     { id: "lastActive", desc: true },
   ]);
 
-  const { data: visitors } = useSWR<Visitor[]>(
+  const { data } = useSWR<{ visitors: Visitor[]; hiddenFromPause: number }>(
     teamInfo?.currentTeam?.id
       ? `/api/analytics?type=visitors&interval=${interval}&teamId=${teamInfo.currentTeam.id}${interval === "custom" ? `&startDate=${format(startDate, "MM-dd-yyyy")}&endDate=${format(endDate, "MM-dd-yyyy")}` : ""}`
       : null,
@@ -232,6 +239,9 @@ export default function VisitorsTable({
       revalidateOnFocus: false,
     },
   );
+
+  const visitors = data?.visitors;
+  const hiddenFromPause = data?.hiddenFromPause ?? 0;
 
   const table = useReactTable({
     data: visitors || [],
@@ -269,20 +279,15 @@ export default function VisitorsTable({
   };
 
   const UpgradeOrExportButton = () => {
-    const [open, setOpen] = useState(false);
     if (isFree && !isTrial) {
       return (
-        <>
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-            Upgrade to Export
-          </Button>
-          <UpgradePlanModal
-            clickedPlan={PlanEnum.Pro}
-            trigger="dashboard_visitors_export"
-            open={open}
-            setOpen={setOpen}
-          />
-        </>
+        <UpgradeButton
+          text="Export"
+          clickedPlan={PlanEnum.Pro}
+          trigger="dashboard_visitors_export"
+          variant="outline"
+          size="sm"
+        />
       );
     } else {
       return (
@@ -296,10 +301,26 @@ export default function VisitorsTable({
 
   return (
     <div className="space-y-4">
+      {isPaused && hiddenFromPause > 0 && (
+        <div className="flex flex-col items-start justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-950 sm:flex-row sm:items-center">
+          <span className="flex items-center gap-x-1 text-sm">
+            <AlertTriangleIcon className="inline-block h-4 w-4 text-orange-500" />
+            {hiddenFromPause} view{hiddenFromPause !== 1 ? "s" : ""} occurred
+            after your team was paused and{" "}
+            {hiddenFromPause !== 1 ? "are" : "is"} hidden.{" "}
+          </span>
+          <Link
+            href="/settings/billing"
+            className="text-sm font-medium text-orange-600 underline hover:text-orange-700"
+          >
+            Unpause subscription to see all views
+          </Link>
+        </div>
+      )}
       <div className="flex justify-end">
         <UpgradeOrExportButton />
       </div>
-      <div className="rounded-xl border">
+      <div className="overflow-x-auto rounded-xl border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

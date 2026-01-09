@@ -33,6 +33,9 @@ export default async function handle(
               id: true,
               name: true,
               plan: true,
+              createdAt: true,
+              enableExcelAdvancedMode: true,
+              replicateDataroomFolders: true,
             },
           },
         },
@@ -64,6 +67,9 @@ export default async function handle(
             id: true,
             name: true,
             plan: true,
+            createdAt: true,
+            enableExcelAdvancedMode: true,
+            replicateDataroomFolders: true,
           },
         });
         teams.push(defaultTeam);

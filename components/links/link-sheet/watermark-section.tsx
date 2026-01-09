@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 
-import { SettingsIcon, StampIcon } from "lucide-react";
+import { LinkPreset } from "@prisma/client";
+import { SettingsIcon } from "lucide-react";
 import { motion } from "motion/react";
+
+import { FADE_IN_ANIMATION_SETTINGS } from "@/lib/constants";
+import { WatermarkConfig } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-import { FADE_IN_ANIMATION_SETTINGS } from "@/lib/constants";
-import { WatermarkConfig } from "@/lib/types";
 
 import { DEFAULT_LINK_TYPE } from ".";
 import LinkItem from "./link-item";
@@ -20,6 +21,7 @@ export default function WatermarkSection({
   setData,
   isAllowed,
   handleUpgradeStateChange,
+  presets,
 }: {
   data: DEFAULT_LINK_TYPE;
   setData: React.Dispatch<React.SetStateAction<DEFAULT_LINK_TYPE>>;
@@ -28,7 +30,9 @@ export default function WatermarkSection({
     state,
     trigger,
     plan,
+    highlightItem,
   }: LinkUpgradeOptions) => void;
+  presets: LinkPreset | null;
 }) {
   const { enableWatermark, watermarkConfig } = data;
   const [enabled, setEnabled] = useState<boolean>(false);
@@ -38,16 +42,18 @@ export default function WatermarkSection({
     setEnabled(enableWatermark);
   }, [enableWatermark]);
 
-  const handleWatermarkToggle = () => {
-    const updatedWatermark = !enabled;
-
-    setData({
-      ...data,
-      enableWatermark: updatedWatermark,
-      watermarkConfig: watermarkConfig || null,
-    });
-    setEnabled(updatedWatermark);
-  };
+  useEffect(() => {
+    if (isAllowed && presets?.enableWatermark && presets?.watermarkConfig) {
+      setEnabled(true);
+      setData((prevData) => ({
+        ...prevData,
+        enableWatermark: true,
+        watermarkConfig: presets.watermarkConfig
+          ? (JSON.parse(presets.watermarkConfig as string) as WatermarkConfig)
+          : null,
+      }));
+    }
+  }, [presets, isAllowed]);
 
   const initialconfig: WatermarkConfig = {
     text: watermarkConfig?.text ?? "",
@@ -57,6 +63,19 @@ export default function WatermarkSection({
     fontSize: watermarkConfig?.fontSize ?? 24,
     rotation: watermarkConfig?.rotation ?? 45,
     position: watermarkConfig?.position ?? "middle-center",
+  };
+
+  const handleWatermarkToggle = () => {
+    const updatedWatermark = !enabled;
+
+    setData({
+      ...data,
+      enableWatermark: updatedWatermark,
+      watermarkConfig: updatedWatermark
+        ? watermarkConfig || initialconfig
+        : null,
+    });
+    setEnabled(updatedWatermark);
   };
 
   const handleConfigSave = (config: WatermarkConfig) => {
@@ -81,6 +100,7 @@ export default function WatermarkSection({
             state: true,
             trigger: "link_sheet_watermark_section",
             plan: "Data Rooms",
+            highlightItem: ["watermark"],
           })
         }
       />

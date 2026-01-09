@@ -6,11 +6,39 @@ export default async function DomainMiddleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const host = req.headers.get("host");
 
-  // If it's the root path, redirect to papermark.com/home
+  // If it's the root path, redirect to papermark.com
   if (path === "/") {
-    return NextResponse.redirect(
-      new URL("https://www.papermark.com/home", req.url),
-    );
+    if (host === "guide.permithealth.com") {
+      return NextResponse.redirect(
+        new URL("https://guide.permithealth.com/faq", req.url),
+      );
+    }
+
+    if (host === "fund.tradeair.in") {
+      return NextResponse.redirect(
+        new URL("https://tradeair.in/sv-fm-inbound", req.url),
+      );
+    }
+
+    if (host === "docs.pashupaticapital.com") {
+      return NextResponse.redirect(
+        new URL("https://www.pashupaticapital.com/", req.url),
+      );
+    }
+
+    if (host === "partners.braxtech.net") {
+      return NextResponse.redirect(
+        new URL("https://partners.braxtech.net/investors", req.url),
+      );
+    }
+
+    if (host === "research.elazaradvisors.com") {
+      return NextResponse.redirect(
+        new URL("https://research.elazaradvisors.com/root", req.url),
+      );
+    }
+
+    return NextResponse.redirect(new URL("https://www.papermark.com", req.url));
   }
 
   const url = req.nextUrl.clone();
@@ -29,7 +57,7 @@ export default async function DomainMiddleware(req: NextRequest) {
     headers: {
       "X-Robots-Tag": "noindex",
       "X-Powered-By":
-        "Papermark.io - Document sharing infrastructure for the modern web",
+        "Papermark - Secure Data Room Infrastructure for the modern web",
     },
   });
 }

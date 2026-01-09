@@ -34,13 +34,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TimestampTooltip } from "@/components/ui/timestamp-tooltip";
 import { DataTablePagination } from "@/components/visitors/data-table-pagination";
 
 import { usePlan } from "@/lib/swr/use-billing";
 import { fetcher, timeAgo } from "@/lib/utils";
 import { downloadCSV } from "@/lib/utils/csv";
+import { UpgradeButton } from "../ui/upgrade-button";
 
-import { UpgradePlanModal } from "../billing/upgrade-plan-modal";
 
 interface Document {
   id: string;
@@ -151,11 +152,20 @@ const columns: ColumnDef<Document>[] = [
         </Button>
       );
     },
-    cell: ({ row }) => (
-      <div className="text-sm text-muted-foreground">
-        {row.original.lastViewed ? timeAgo(row.original.lastViewed) : "-"}
-      </div>
-    ),
+    cell: ({ row }) =>
+      row.original.lastViewed ? (
+        <TimestampTooltip
+          timestamp={row.original.lastViewed}
+          side="right"
+          rows={["local", "utc", "unix"]}
+        >
+          <div className="select-none text-sm text-muted-foreground">
+            {timeAgo(row.original.lastViewed)}
+          </div>
+        </TimestampTooltip>
+      ) : (
+        <div className="text-sm text-muted-foreground">-</div>
+      ),
   },
 ];
 
@@ -175,7 +185,9 @@ export default function DocumentsTable({
 
   const interval = router.query.interval || "24h";
   const { data: documents, isLoading } = useSWR<Document[]>(
-    `/api/analytics?type=documents&interval=${interval}&teamId=${teamInfo?.currentTeam?.id}${interval === "custom" ? `&startDate=${format(startDate, "MM-dd-yyyy")}&endDate=${format(endDate, "MM-dd-yyyy")}` : ""}`,
+    teamInfo?.currentTeam?.id
+      ? `/api/analytics?type=documents&interval=${interval}&teamId=${teamInfo.currentTeam.id}${interval === "custom" ? `&startDate=${format(startDate, "MM-dd-yyyy")}&endDate=${format(endDate, "MM-dd-yyyy")}` : ""}`
+      : null,
     fetcher,
     {
       keepPreviousData: true,
@@ -219,20 +231,15 @@ export default function DocumentsTable({
   };
 
   const UpgradeOrExportButton = () => {
-    const [open, setOpen] = useState(false);
     if (isFree && !isTrial) {
       return (
-        <>
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-            Upgrade to Export
-          </Button>
-          <UpgradePlanModal
-            clickedPlan={PlanEnum.Pro}
-            trigger="dashboard_documents_export"
-            open={open}
-            setOpen={setOpen}
-          />
-        </>
+        <UpgradeButton
+          text="Export"
+          clickedPlan={PlanEnum.Pro}
+          trigger="dashboard_documents_export"
+          variant="outline"
+          size="sm"
+        />
       );
     } else {
       return (
@@ -249,7 +256,7 @@ export default function DocumentsTable({
       <div className="flex justify-end">
         <UpgradeOrExportButton />
       </div>
-      <div className="rounded-xl border">
+      <div className="overflow-x-auto rounded-xl border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

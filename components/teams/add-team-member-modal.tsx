@@ -1,6 +1,5 @@
-import { useRouter } from "next/router";
-
 import { useState } from "react";
+import { useRouter } from "next/router";
 
 import { useTeam } from "@/context/team-context";
 import { toast } from "sonner";
@@ -34,9 +33,13 @@ export function AddTeamMembers({
   const [email, setEmail] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const teamInfo = useTeam();
+  const teamId = teamInfo?.currentTeam?.id;
   const analytics = useAnalytics();
+  const router = useRouter();
   const emailSchema = z
     .string()
+    .trim()
+    .toLowerCase()
     .min(3, { message: "Please enter a valid email." })
     .email({ message: "Please enter a valid email." });
 
@@ -51,18 +54,15 @@ export function AddTeamMembers({
     }
 
     setLoading(true);
-    const response = await fetch(
-      `/api/teams/${teamInfo?.currentTeam?.id}/invite`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: email,
-        }),
+    const response = await fetch(`/api/teams/${teamId}/invite`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({
+        email: validation.data,
+      }),
+    });
 
     if (!response.ok) {
       const error = await response.json();
@@ -73,15 +73,19 @@ export function AddTeamMembers({
     }
 
     analytics.capture("Team Member Invitation Sent", {
-      email: email,
-      teamId: teamInfo?.currentTeam?.id,
+      email: validation.data,
+      teamId: teamId,
     });
 
-    mutate(`/api/teams/${teamInfo?.currentTeam?.id}/invitations`);
+    mutate(`/api/teams/${teamId}/invitations`);
+    mutate(`/api/teams/${teamId}/limits`);
 
     toast.success("An invitation email has been sent!");
     setOpen(false);
     setLoading(false);
+    
+    // Redirect to team members page
+    router.push("/settings/people");
   };
 
   return (

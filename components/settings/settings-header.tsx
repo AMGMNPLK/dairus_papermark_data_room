@@ -1,22 +1,9 @@
-import { useTeam } from "@/context/team-context";
-import useSWR from "swr";
-
-import { fetcher } from "@/lib/utils";
+import { useFeatureFlags } from "@/lib/hooks/use-feature-flags";
 
 import { NavMenu } from "../navigation-menu";
 
 export function SettingsHeader() {
-  const teamInfo = useTeam();
-  const { data: features } = useSWR<{
-    tokens: boolean;
-    incomingWebhooks: boolean;
-    webhooks: boolean;
-  }>(
-    teamInfo?.currentTeam?.id
-      ? `/api/feature-flags?teamId=${teamInfo.currentTeam.id}`
-      : null,
-    fetcher,
-  );
+  const { features } = useFeatureFlags();
 
   return (
     <header>
@@ -39,7 +26,7 @@ export function SettingsHeader() {
             segment: `general`,
           },
           {
-            label: "People",
+            label: "Team",
             href: `/settings/people`,
             segment: "people",
           },
@@ -54,9 +41,30 @@ export function SettingsHeader() {
             segment: "presets",
           },
           {
-            label: "Billing",
-            href: `/settings/billing`,
-            segment: "billing",
+            label: "Tags",
+            href: `/settings/tags`,
+            segment: "tags",
+          },
+          {
+            label: "Agreements",
+            href: `/settings/agreements`,
+            segment: "agreements",
+          },
+          {
+            label: "Webhooks",
+            href: `/settings/webhooks`,
+            segment: "webhooks",
+          },
+          {
+            label: "Slack",
+            href: `/settings/slack`,
+            segment: "slack",
+          },
+          {
+            label: "AI",
+            href: `/settings/ai`,
+            segment: "ai",
+            disabled: !features?.ai,
           },
           {
             label: "Tokens",
@@ -65,16 +73,15 @@ export function SettingsHeader() {
             disabled: !features?.tokens,
           },
           {
-            label: "Webhooks",
-            href: `/settings/webhooks`,
-            segment: "webhooks",
-            disabled: !features?.webhooks,
-          },
-          {
-            label: "Incoming Webhooks",
+            label: "API",
             href: `/settings/incoming-webhooks`,
             segment: "incoming-webhooks",
             disabled: !features?.incomingWebhooks,
+          },
+          {
+            label: "Billing",
+            href: `/settings/billing`,
+            segment: "billing",
           },
         ]}
       />

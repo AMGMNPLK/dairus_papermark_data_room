@@ -1,4 +1,5 @@
-import { getFeatureFlags } from "@/lib/featureFlags";
+import { isTeamPausedById } from "@/ee/features/billing/cancellation/lib/is-team-paused";
+
 import prisma from "@/lib/prisma";
 import { log } from "@/lib/utils";
 import { sendWebhooks } from "@/lib/webhook/send-webhooks";
@@ -22,9 +23,25 @@ export async function sendLinkViewWebhook({
       throw new Error("Missing required parameters");
     }
 
-    const features = await getFeatureFlags({ teamId });
-    if (!features.webhooks) {
-      // webhooks are not enabled for this team
+    // check if team is on paid plan
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      select: { plan: true },
+    });
+
+    if (
+      team?.plan === "free" ||
+      team?.plan === "pro" ||
+      team?.plan.includes("trial")
+    ) {
+      // team is not on paid plan, so we don't need to send webhooks
+      return;
+    }
+
+    // check if team is paused
+    const teamIsPaused = await isTeamPausedById(teamId);
+    if (teamIsPaused) {
+      // team is paused, so we don't send webhooks
       return;
     }
 
@@ -88,6 +105,7 @@ export async function sendLinkViewWebhook({
       documentId: link.documentId,
       dataroomId: link.dataroomId,
       groupId: link.groupId,
+      permissionGroupId: link.permissionGroupId,
       linkType: link.linkType,
       teamId: teamId,
       createdAt: link.createdAt.toISOString(),
@@ -129,13 +147,18 @@ export async function sendLinkViewWebhook({
       documentId
         ? prisma.document.findUnique({
             where: { id: documentId, teamId },
-            select: { id: true, name: true, contentType: true },
+            select: {
+              id: true,
+              name: true,
+              contentType: true,
+              createdAt: true,
+            },
           })
         : null,
       dataroomId
         ? prisma.dataroom.findUnique({
             where: { id: dataroomId, teamId },
-            select: { id: true, name: true },
+            select: { id: true, name: true, createdAt: true },
           })
         : null,
     ]);
@@ -150,6 +173,7 @@ export async function sendLinkViewWebhook({
           name: document.name,
           contentType: document.contentType,
           teamId: teamId,
+          createdAt: document.createdAt.toISOString(),
         },
       }),
       ...(dataroom && {
@@ -157,6 +181,7 @@ export async function sendLinkViewWebhook({
           id: dataroom.id,
           name: dataroom.name,
           teamId: teamId,
+          createdAt: dataroom.createdAt.toISOString(),
         },
       }),
     };

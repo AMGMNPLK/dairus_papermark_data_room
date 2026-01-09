@@ -3,6 +3,10 @@ import { useRouter } from "next/router";
 import { useState } from "react";
 
 import { useTeam } from "@/context/team-context";
+import { toast } from "sonner";
+
+import { moveDataroomDocumentToFolder } from "@/lib/documents/move-dataroom-documents";
+import { moveDataroomFolderToFolder } from "@/lib/documents/move-dataroom-folders";
 
 import { SidebarFolderTreeSelection } from "@/components/datarooms/folders";
 import { Button } from "@/components/ui/button";
@@ -15,8 +19,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { moveDataroomDocumentToFolder } from "@/lib/documents/move-dataroom-documents";
-
 import { TSelectedFolder } from "../documents/move-folder-modal";
 
 export function MoveToDataroomFolderModal({
@@ -25,14 +27,20 @@ export function MoveToDataroomFolderModal({
   dataroomId,
   setSelectedDocuments,
   documentIds,
-  documentName,
+  itemName,
+  folderIds,
+  folderParentId,
+  setSelectedFoldersId,
 }: {
   open: boolean;
+  folderIds: string[];
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
   dataroomId: string;
   setSelectedDocuments?: React.Dispatch<React.SetStateAction<string[]>>;
-  documentIds: string[];
-  documentName?: string;
+  documentIds?: string[];
+  itemName?: string;
+  folderParentId?: string;
+  setSelectedFoldersId?: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
   const router = useRouter();
   const [selectedFolder, setSelectedFolder] = useState<TSelectedFolder>(null);
@@ -52,18 +60,41 @@ export function MoveToDataroomFolderModal({
     if (!selectedFolder) return;
 
     setLoading(true);
-
-    await moveDataroomDocumentToFolder({
-      documentIds,
-      folderId: selectedFolder.id!,
-      folderPathName: currentPath ? currentPath.split("/") : undefined,
-      dataroomId,
-      teamId,
-    });
+    if (folderParentId === selectedFolder.id) {
+      toast.error("Folder is already in the selected folder.");
+      setLoading(false);
+      return;
+    }
+    if (folderIds.includes(selectedFolder.id!)) {
+      toast.error("Cannot move to the same folder.");
+      setLoading(false);
+      return;
+    }
+    if (documentIds && documentIds.length > 0) {
+      await moveDataroomDocumentToFolder({
+        documentIds,
+        folderId: selectedFolder.id!,
+        folderPathName: currentPath ? currentPath.split("/") : undefined,
+        dataroomId,
+        teamId,
+        folderIds,
+      });
+    }
+    if (folderIds && folderIds.length > 0) {
+      await moveDataroomFolderToFolder({
+        folderIds: folderIds,
+        folderPathName: currentPath ? currentPath.split("/") : undefined,
+        teamId,
+        selectedFolder: selectedFolder.id!,
+        dataroomId: dataroomId,
+        selectedFolderPath: selectedFolder.path!,
+      });
+    }
 
     setLoading(false);
     setOpen(false); // Close the modal
     setSelectedDocuments?.([]); // Clear the selected documents
+    setSelectedFoldersId?.([]); // Clear the selected folders
   };
 
   return (
@@ -73,17 +104,18 @@ export function MoveToDataroomFolderModal({
           <DialogTitle>
             Move{" "}
             <span className="font-bold">
-              {documentName ? documentName : `${documentIds.length} items`}
+              {`${(documentIds?.length ?? 0) + (folderIds?.length ?? 0)} items`}
             </span>
           </DialogTitle>
-          <DialogDescription>Move your document to a folder.</DialogDescription>
+          <DialogDescription>Move your item to a folder.</DialogDescription>
         </DialogHeader>
         <form>
-          <div className="mb-2 max-h-[75vh] overflow-y-scroll">
+          <div className="mb-2 max-h-[75vh] overflow-x-hidden overflow-y-scroll">
             <SidebarFolderTreeSelection
               dataroomId={dataroomId}
               selectedFolder={selectedFolder}
               setSelectedFolder={setSelectedFolder}
+              disableId={folderIds}
             />
           </div>
 
@@ -92,14 +124,18 @@ export function MoveToDataroomFolderModal({
               onClick={handleSubmit}
               className="flex h-9 w-full gap-1"
               loading={loading}
-              disabled={!selectedFolder}
+              disabled={
+                !selectedFolder || folderIds?.includes(selectedFolder.id!)
+              }
             >
               {!selectedFolder ? (
                 "Select a folder"
               ) : (
                 <>
                   Move to{" "}
-                  <span className="font-medium">{selectedFolder.name}</span>
+                  <span className="max-w-[200px] truncate font-medium">
+                    {selectedFolder.name}
+                  </span>
                 </>
               )}
             </Button>

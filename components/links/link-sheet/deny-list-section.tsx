@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 
+import { LinkPreset } from "@prisma/client";
 import { motion } from "motion/react";
 
-import { Textarea } from "@/components/ui/textarea";
-
 import { FADE_IN_ANIMATION_SETTINGS } from "@/lib/constants";
-import { sanitizeAllowDenyList } from "@/lib/utils";
+import { sanitizeList } from "@/lib/utils";
+
+import { Textarea } from "@/components/ui/textarea";
 
 import { DEFAULT_LINK_TYPE } from ".";
 import LinkItem from "./link-item";
@@ -16,16 +17,18 @@ export default function DenyListSection({
   setData,
   isAllowed,
   handleUpgradeStateChange,
+  presets,
 }: {
   data: DEFAULT_LINK_TYPE;
   setData: React.Dispatch<React.SetStateAction<DEFAULT_LINK_TYPE>>;
-
   isAllowed: boolean;
   handleUpgradeStateChange: ({
     state,
     trigger,
     plan,
+    highlightItem,
   }: LinkUpgradeOptions) => void;
+  presets: LinkPreset | null;
 }) {
   const { emailProtected, denyList } = data;
   // Initialize enabled state based on whether denyList is not null and not empty
@@ -38,13 +41,20 @@ export default function DenyListSection({
 
   useEffect(() => {
     // Update the denyList in the data state when their inputs change
-    const newDenyList = sanitizeAllowDenyList(denyListInput);
+    const newDenyList = sanitizeList(denyListInput);
     setEnabled((prevEnabled) => prevEnabled && emailProtected);
     setData((prevData) => ({
       ...prevData,
       denyList: emailProtected && enabled ? newDenyList : [],
     }));
   }, [denyListInput, enabled, emailProtected, setData]);
+
+  useEffect(() => {
+    if (isAllowed && presets?.denyList && presets.denyList.length > 0) {
+      setEnabled(true);
+      setDenyListInput(presets.denyList?.join("\n") || "");
+    }
+  }, [presets, isAllowed]);
 
   const handleEnableDenyList = () => {
     const updatedEnabled = !enabled;
@@ -53,7 +63,7 @@ export default function DenyListSection({
     if (updatedEnabled) {
       setData((prevData) => ({
         ...prevData,
-        denyList: updatedEnabled ? sanitizeAllowDenyList(denyListInput) : [],
+        denyList: updatedEnabled ? sanitizeList(denyListInput) : [],
         emailAuthenticated: true, // Turn on email authentication
         emailProtected: true, // Turn on email protection
       }));
@@ -87,6 +97,7 @@ export default function DenyListSection({
               state: true,
               trigger: "link_sheet_denylist_section",
               plan: "Business",
+              highlightItem: ["allow-block"],
             })
           }
         />
@@ -99,7 +110,9 @@ export default function DenyListSection({
             <Textarea
               className="focus:ring-inset"
               rows={5}
-              placeholder="Enter blocked emails/domains, one per line, e.g.                                      marc@papermark.io                                                                                   @example.org"
+              placeholder={`Enter blocked emails/domains, one per line, e.g.
+marc@papermark.com
+@example.org`}
               value={denyListInput}
               onChange={handleDenyListChange}
             />

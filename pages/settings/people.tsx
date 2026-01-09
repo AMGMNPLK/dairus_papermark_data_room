@@ -1,17 +1,22 @@
-import Link from "next/link";
 import { useRouter } from "next/router";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useTeam } from "@/context/team-context";
 import { PlanEnum } from "@/ee/stripe/constants";
-import { getPriceIdFromPlan } from "@/ee/stripe/functions/get-price-id-from-plan";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { mutate } from "swr";
 
+import { useAnalytics } from "@/lib/analytics";
+import { usePlan } from "@/lib/swr/use-billing";
+import { useInvitations } from "@/lib/swr/use-invitations";
+import useLimits from "@/lib/swr/use-limits";
+import { useGetTeam } from "@/lib/swr/use-team";
+import { useTeams } from "@/lib/swr/use-teams";
+import { CustomUser } from "@/lib/types";
+
 import { AddSeatModal } from "@/components/billing/add-seat-modal";
-import { UpgradePlanModal } from "@/components/billing/upgrade-plan-modal";
 import AppLayout from "@/components/layouts/app";
 import { SettingsHeader } from "@/components/settings/settings-header";
 import Folder from "@/components/shared/icons/folder";
@@ -26,14 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-
-import { useAnalytics } from "@/lib/analytics";
-import { usePlan } from "@/lib/swr/use-billing";
-import { useInvitations } from "@/lib/swr/use-invitations";
-import useLimits from "@/lib/swr/use-limits";
-import { useGetTeam } from "@/lib/swr/use-team";
-import { useTeams } from "@/lib/swr/use-teams";
-import { CustomUser } from "@/lib/types";
+import { UpgradeButton } from "@/components/ui/upgrade-button";
 
 export default function Billing() {
   const [isTeamMemberInviteModalOpen, setTeamMemberInviteModalOpen] =
@@ -44,8 +42,8 @@ export default function Billing() {
   const { data: session } = useSession();
   const { team, loading } = useGetTeam()!;
   const teamInfo = useTeam();
-  const { plan: userPlan, planName } = usePlan();
-  const { limits } = useLimits();
+  const { isTrial } = usePlan();
+  const { canAddUsers, showUpgradePlanModal } = useLimits();
   const { teams } = useTeams();
   const analytics = useAnalytics();
 
@@ -53,14 +51,21 @@ export default function Billing() {
 
   const router = useRouter();
 
-  const numUsers = (team && team.users.length) ?? 1;
-  const numInvitations = (invitations && invitations.length) ?? 0;
+  const documentCountsByUser = useMemo(() => {
+    if (!team?.documents) return {};
+
+    const counts: Record<string, number> = {};
+    team.documents.forEach((document) => {
+      const ownerId = document.owner?.id;
+      if (ownerId) {
+        counts[ownerId] = (counts[ownerId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [team]);
 
   const getUserDocumentCount = (userId: string) => {
-    const documents = team?.documents.filter(
-      (document) => document.owner.id === userId,
-    );
-    return documents?.length;
+    return documentCountsByUser[userId] || 0;
   };
 
   const isCurrentUser = (userId: string) => {
@@ -78,7 +83,11 @@ export default function Billing() {
     );
   };
 
-  const changeRole = async (teamId: string, userId: string, role: string) => {
+  const changeRole = async (
+    teamId: string,
+    userId: string,
+    role: "ADMIN" | "MANAGER" | "MEMBER",
+  ) => {
     const response = await fetch(`/api/teams/${teamId}/change-role`, {
       method: "PUT",
       headers: {
@@ -129,6 +138,8 @@ export default function Billing() {
 
     await mutate(`/api/teams/${teamInfo?.currentTeam?.id}`);
     await mutate("/api/teams");
+    mutate(`/api/teams/${teamInfo?.currentTeam?.id}/invitations`);
+    mutate(`/api/teams/${teamInfo?.currentTeam?.id}/limits`);
 
     setLeavingUserId("");
     if (isCurrentUser(userId)) {
@@ -171,6 +182,8 @@ export default function Billing() {
       email: invitation.email as string,
       teamId: teamInfo?.currentTeam?.id,
     });
+    mutate(`/api/teams/${teamInfo?.currentTeam?.id}/invitations`);
+    mutate(`/api/teams/${teamInfo?.currentTeam?.id}/limits`);
 
     toast.success("Invitation resent successfully!");
   };
@@ -202,9 +215,11 @@ export default function Billing() {
     });
 
     mutate(`/api/teams/${teamInfo?.currentTeam?.id}/invitations`);
+    mutate(`/api/teams/${teamInfo?.currentTeam?.id}/limits`);
 
     toast.success("Invitation revoked successfully!");
   };
+  const showInvite = canAddUsers;
 
   return (
     <AppLayout>
@@ -224,22 +239,18 @@ export default function Billing() {
           <div>
             <div className="flex items-center justify-between gap-x-1 rounded-lg border border-border bg-secondary p-4 sm:p-10">
               <div className="flex flex-col space-y-1 sm:space-y-3">
-                <h2 className="text-xl font-medium">People</h2>
+                <h2 className="text-xl font-medium">Team</h2>
                 <p className="text-sm text-secondary-foreground">
                   Teammates that have access to this project.
                 </p>
               </div>
-              {userPlan === "free" ? (
-                <UpgradePlanModal
-                  clickedPlan={PlanEnum.Pro}
-                  trigger={"invite_team_members"}
-                >
-                  <Button className="whitespace-nowrap px-1 text-xs sm:px-4 sm:text-sm">
-                    Upgrade to invite members
-                  </Button>
-                </UpgradePlanModal>
-              ) : limits === null ||
-                (limits && limits.users > numUsers + numInvitations) ? (
+              {showUpgradePlanModal ? (
+                <UpgradeButton
+                  text="Invite Members"
+                  clickedPlan={isTrial ? PlanEnum.Business : PlanEnum.Pro}
+                  trigger="invite_team_members"
+                />
+              ) : showInvite ? (
                 <AddTeamMembers
                   open={isTeamMemberInviteModalOpen}
                   setOpen={setTeamMemberInviteModalOpen}
@@ -302,9 +313,16 @@ export default function Billing() {
                   </div>
                 </div>
                 <div className="flex items-center gap-12">
-                  <span className="text-sm capitalize text-foreground">
-                    {member.role.toLowerCase()}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-sm capitalize text-foreground">
+                      {member.role.toLowerCase()}
+                    </span>
+                    {member.status === "BLOCKED_TRIAL_EXPIRED" && (
+                      <span className="text-xs font-medium text-red-500">
+                        Blocked (Trial Expired)
+                      </span>
+                    )}
+                  </div>
                   {leavingUserId === member.userId ? (
                     <span className="text-xs">leaving...</span>
                   ) : (
@@ -330,21 +348,48 @@ export default function Billing() {
                         {isCurrentUserAdmin() &&
                         !isCurrentUser(member.userId) ? (
                           <>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                changeRole(
-                                  member.teamId,
-                                  member.userId,
-                                  member.role === "MEMBER"
-                                    ? "MANAGER"
-                                    : "MEMBER",
-                                )
-                              }
-                              className="text-red-500 hover:cursor-pointer focus:bg-destructive focus:text-destructive-foreground"
-                            >
-                              Change role to{" "}
-                              {member.role === "MEMBER" ? "MANAGER" : "MEMBER"}
-                            </DropdownMenuItem>
+                            {member.role !== "ADMIN" && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  changeRole(
+                                    member.teamId,
+                                    member.userId,
+                                    "ADMIN",
+                                  )
+                                }
+                                className="hover:cursor-pointer"
+                              >
+                                Change role to ADMIN
+                              </DropdownMenuItem>
+                            )}
+                            {member.role !== "MANAGER" && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  changeRole(
+                                    member.teamId,
+                                    member.userId,
+                                    "MANAGER",
+                                  )
+                                }
+                                className="hover:cursor-pointer"
+                              >
+                                Change role to MANAGER
+                              </DropdownMenuItem>
+                            )}
+                            {member.role !== "MEMBER" && (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  changeRole(
+                                    member.teamId,
+                                    member.userId,
+                                    "MEMBER",
+                                  )
+                                }
+                                className="hover:cursor-pointer"
+                              >
+                                Change role to MEMBER
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               onClick={() =>
                                 removeTeammate(member.teamId, member.userId)

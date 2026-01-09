@@ -16,8 +16,7 @@ export default async function handle(
     // DELETE /api/teams/:teamId/folders/manage/:folderId
     const session = await getServerSession(req, res, authOptions);
     if (!session) {
-      res.status(401).end("Unauthorized");
-      return;
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const { teamId, folderId } = req.query as {
@@ -28,19 +27,27 @@ export default async function handle(
     const userId = (session.user as CustomUser).id;
 
     try {
-      const team = await prisma.team.findUnique({
+      const teamAccess = await prisma.userTeam.findUnique({
         where: {
-          id: teamId,
-          users: {
-            some: {
-              userId: userId,
-            },
+          userId_teamId: {
+            userId: userId,
+            teamId: teamId,
           },
+        },
+        select: {
+          role: true,
         },
       });
 
-      if (!team) {
-        return res.status(401).end("Unauthorized");
+      if (!teamAccess) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (teamAccess.role !== "ADMIN" && teamAccess.role !== "MANAGER") {
+        return res.status(403).json({
+          message:
+            "You are not permitted to perform this action. Only admin and managers can delete folders.",
+        });
       }
 
       const folder = await prisma.folder.findUnique({
@@ -64,20 +71,22 @@ export default async function handle(
       }
 
       // Delete the folder and its contents
-      await deleteFolderAndContents(folderId);
+      await deleteFolderAndContents(folderId, teamId);
 
       return res.status(204).end(); // 204 No Content response for successful deletes
     } catch (error) {
       errorhandler(error, res);
     }
   } else {
-    // We only allow GET, PUT and DELETE requests
+    // We only allow DELETE requests
     res.setHeader("Allow", ["DELETE"]);
-    return res.status(405).end(`Method ${req.method} Not Allowed`);
+    return res
+      .status(405)
+      .json({ message: `Method ${req.method} Not Allowed` });
   }
 }
 
-async function deleteFolderAndContents(folderId: string) {
+async function deleteFolderAndContents(folderId: string, teamId: string) {
   const childFoldersToDelete = await prisma.folder.findMany({
     where: {
       parentId: folderId,
@@ -85,7 +94,7 @@ async function deleteFolderAndContents(folderId: string) {
   });
 
   for (const childFolder of childFoldersToDelete) {
-    await deleteFolderAndContents(childFolder.id);
+    await deleteFolderAndContents(childFolder.id, teamId);
   }
 
   // Delete all documents in the folder
@@ -110,7 +119,11 @@ async function deleteFolderAndContents(folderId: string) {
 
   documents.map(async (documentVersions: { versions: any }) => {
     for (const version of documentVersions.versions) {
-      await deleteFile({ type: version.storageType, data: version.file });
+      await deleteFile({
+        type: version.storageType,
+        data: version.file,
+        teamId,
+      });
     }
   });
 

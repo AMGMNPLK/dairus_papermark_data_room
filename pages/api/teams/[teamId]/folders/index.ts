@@ -23,18 +23,16 @@ export default async function handle(
 
     try {
       // Check if the user is part of the team
-      const team = await prisma.team.findUnique({
+      const teamAccess = await prisma.userTeam.findUnique({
         where: {
-          id: teamId,
-          users: {
-            some: {
-              userId: userId,
-            },
+          userId_teamId: {
+            userId: userId,
+            teamId: teamId,
           },
         },
       });
 
-      if (!team) {
+      if (!teamAccess) {
         return res.status(401).end("Unauthorized");
       }
 
@@ -105,26 +103,20 @@ export default async function handle(
     const { teamId } = req.query as { teamId: string };
     const { name, path } = req.body as { name: string; path: string };
 
-    const childFolderPath = path
-      ? "/" + path + "/" + slugify(name)
-      : "/" + slugify(name);
-
     const parentFolderPath = path ? "/" + path : "/";
 
     try {
       // Check if the user is part of the team
-      const team = await prisma.team.findUnique({
+      const teamAccess = await prisma.userTeam.findUnique({
         where: {
-          id: teamId,
-          users: {
-            some: {
-              userId: userId,
-            },
+          userId_teamId: {
+            userId: userId,
+            teamId: teamId,
           },
         },
       });
 
-      if (!team) {
+      if (!teamAccess) {
         return res.status(401).end("Unauthorized");
       }
 
@@ -142,9 +134,43 @@ export default async function handle(
         },
       });
 
+      let folderName = name;
+      let counter = 1;
+      const MAX_RETRIES = 50;
+
+      let childFolderPath = path
+        ? "/" + path + "/" + slugify(folderName)
+        : "/" + slugify(folderName);
+
+      while (counter <= MAX_RETRIES) {
+        const existingFolder = await prisma.folder.findUnique({
+          where: {
+            teamId_path: {
+              teamId: teamId,
+              path: childFolderPath,
+            },
+          },
+        });
+
+        if (!existingFolder) break;
+
+        folderName = `${name} (${counter})`;
+        childFolderPath = path
+          ? "/" + path + "/" + slugify(folderName)
+          : "/" + slugify(folderName);
+        counter++;
+      }
+
+      if (counter > MAX_RETRIES) {
+        return res.status(400).json({
+          error: "Failed to create folder",
+          message: "Too many folders with similar names",
+        });
+      }
+
       const folder = await prisma.folder.create({
         data: {
-          name: name,
+          name: folderName,
           path: childFolderPath,
           parentId: parentFolder?.id ?? null,
           teamId: teamId,

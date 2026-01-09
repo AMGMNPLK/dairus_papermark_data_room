@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth/next";
 
 import prisma from "@/lib/prisma";
 import { CustomUser } from "@/lib/types";
+import { folderPathSchema } from "@/lib/zod/schemas/folders";
 
 export default async function handle(
   req: NextApiRequest,
@@ -20,22 +21,30 @@ export default async function handle(
     const userId = (session.user as CustomUser).id;
     const { teamId, name } = req.query as { teamId: string; name: string[] };
 
-    const path = "/" + name.join("/"); // construct the materialized path
+    // Validate that name is an array of strings using shared Zod schema
+    const nameValidation = folderPathSchema.safeParse(name);
+    if (!nameValidation.success) {
+      return res.status(400).json({
+        error: "Invalid folder path format",
+        details: nameValidation.error.issues.map((issue) => issue.message),
+      });
+    }
+
+    const validatedName = nameValidation.data;
+    const path = "/" + validatedName.join("/"); // construct the materialized path
 
     try {
       // Check if the user is part of the team
-      const team = await prisma.team.findUnique({
+      const teamAccess = await prisma.userTeam.findUnique({
         where: {
-          id: teamId,
-          users: {
-            some: {
-              userId: userId,
-            },
+          userId_teamId: {
+            userId: userId,
+            teamId: teamId,
           },
         },
       });
 
-      if (!team) {
+      if (!teamAccess) {
         return res.status(401).end("Unauthorized");
       }
 

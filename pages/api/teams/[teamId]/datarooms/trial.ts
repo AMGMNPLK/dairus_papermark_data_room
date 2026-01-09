@@ -8,11 +8,12 @@ import { sendDataroomTrialWelcome } from "@/lib/emails/send-dataroom-trial";
 import { newId } from "@/lib/id-helper";
 import prisma from "@/lib/prisma";
 import {
+  sendDataroomTrial24hReminderEmailTask,
   sendDataroomTrialExpiredEmailTask,
   sendDataroomTrialInfoEmailTask,
 } from "@/lib/trigger/send-scheduled-email";
 import { CustomUser } from "@/lib/types";
-import { log } from "@/lib/utils";
+import { log, logStore } from "@/lib/utils";
 
 export const config = {
   // in order to enable `waitUntil` function
@@ -35,14 +36,14 @@ export default async function handle(
     const email = (session.user as CustomUser).email;
 
     const { teamId } = req.query as { teamId: string };
-    const { name, fullName, companyName, industry, companySize, phoneNumber } =
+    const { name, fullName, companyName, useCase, companySize, tools } =
       req.body as {
         name: string;
         fullName: string;
         companyName: string;
-        industry: string;
+        useCase: string;
         companySize: string;
-        phoneNumber: string;
+        tools: string;
       };
 
     try {
@@ -77,9 +78,21 @@ export default async function handle(
       }
 
       await log({
-        message: `Dataroom Trial: ${teamId} \n\nEmail: ${email} \nName: ${fullName} \nCompany Name: ${companyName} \nIndustry: ${industry} \nCompany Size: ${companySize} \nPhone Number: ${phoneNumber}`,
+        message: `Dataroom Trial: ${teamId} \n\nEmail: ${email} \nName: ${fullName} \nCompany Name: ${companyName} \nUse Case: ${useCase} \nCompany Size: ${companySize} \nTools: ${tools}`,
         type: "trial",
         mention: true,
+      });
+
+      await logStore({
+        object: {
+          teamId: teamId,
+          email: email,
+          fullName: fullName,
+          companyName: companyName,
+          useCase: useCase,
+          companySize: companySize,
+          tools: tools,
+        },
       });
 
       await prisma.team.update({
@@ -113,14 +126,20 @@ export default async function handle(
       waitUntil(sendDataroomTrialWelcome({ fullName, to: email! }));
       waitUntil(
         sendDataroomTrialInfoEmailTask.trigger(
-          { to: email! },
-          { delay: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000) },
+          { to: email!, useCase },
+          { delay: "1d" },
+        ),
+      );
+      waitUntil(
+        sendDataroomTrial24hReminderEmailTask.trigger(
+          { to: email!, name: fullName.split(" ")[0], teamId },
+          { delay: "6d" },
         ),
       );
       waitUntil(
         sendDataroomTrialExpiredEmailTask.trigger(
           { to: email!, name: fullName.split(" ")[0], teamId },
-          { delay: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+          { delay: "7d" },
         ),
       );
 

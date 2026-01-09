@@ -2,8 +2,13 @@ import { useState } from "react";
 
 import { useTeam } from "@/context/team-context";
 import { PlanEnum } from "@/ee/stripe/constants";
+import { LinkType } from "@prisma/client";
 import { toast } from "sonner";
 import { z } from "zod";
+
+import { useAnalytics } from "@/lib/analytics";
+import { usePlan } from "@/lib/swr/use-billing";
+import useLimits from "@/lib/swr/use-limits";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,11 +23,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import { useAnalytics } from "@/lib/analytics";
-import { usePlan } from "@/lib/swr/use-billing";
-import useLimits from "@/lib/swr/use-limits";
-
-import { UpgradePlanModal } from "../billing/upgrade-plan-modal";
+import { UpgradePlanModalWithDiscount } from "../billing/upgrade-plan-modal-with-discount";
+import { UpgradeButton } from "../ui/upgrade-button";
 
 export function AddDomainModal({
   open,
@@ -34,7 +36,7 @@ export function AddDomainModal({
   open: boolean;
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
   onAddition?: (newDomain: string) => void;
-  linkType?: "DOCUMENT_LINK" | "DATAROOM_LINK";
+  linkType?: Omit<LinkType, "WORKFLOW_LINK">;
   children?: React.ReactNode;
 }) {
   const [domain, setDomain] = useState<string>("");
@@ -116,20 +118,20 @@ export function AddDomainModal({
   ) {
     if (children) {
       return (
-        <UpgradePlanModal
+        <UpgradeButton
+          text="Add Domain"
           clickedPlan={
             linkType === "DATAROOM_LINK"
               ? PlanEnum.DataRooms
               : PlanEnum.Business
           }
-          trigger={"add_domain_overview"}
-        >
-          <Button>Upgrade to Add Domain</Button>
-        </UpgradePlanModal>
+          highlightItem={["custom-domain"]}
+          trigger="add_domain_overview"
+        />
       );
     } else {
       return (
-        <UpgradePlanModal
+        <UpgradePlanModalWithDiscount
           clickedPlan={
             linkType === "DATAROOM_LINK"
               ? PlanEnum.DataRooms
@@ -138,6 +140,7 @@ export function AddDomainModal({
           open={open}
           setOpen={setOpen}
           trigger={"add_domain_link_sheet"}
+          highlightItem={["custom-domain"]}
         />
       );
     }

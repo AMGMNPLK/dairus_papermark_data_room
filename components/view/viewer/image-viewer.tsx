@@ -3,97 +3,46 @@ import { useRouter } from "next/router";
 import { useEffect, useRef, useState } from "react";
 import React from "react";
 
-import { Brand, DataroomBrand } from "@prisma/client";
-
+import { useSafePageViewTracker } from "@/lib/tracking/safe-page-view-tracker";
+import { getTrackingOptions } from "@/lib/tracking/tracking-config";
 import { WatermarkConfig } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useMediaQuery } from "@/lib/utils/use-media-query";
+
+import { ScreenProtector } from "../ScreenProtection";
+import Nav, { TNavData } from "../nav";
+import { PoweredBy } from "../powered-by";
+import { SVGWatermark } from "../watermark-svg";
+import { AwayPoster } from "./away-poster";
 
 import "@/styles/custom-viewer-styles.css";
 
-import { ScreenProtector } from "../ScreenProtection";
-import { TDocumentData } from "../dataroom/dataroom-view";
-import Nav from "../nav";
-import { PoweredBy } from "../powered-by";
-import { SVGWatermark } from "../watermark-svg";
-
-const trackPageView = async (data: {
-  linkId: string;
-  documentId: string;
-  viewId?: string;
-  duration: number;
-  pageNumber: number;
-  versionNumber: number;
-  dataroomId?: string;
-  isPreview?: boolean;
-}) => {
-  // If the view is a preview, do not track the view
-  if (data.isPreview) return;
-
-  await fetch("/api/record_view", {
-    method: "POST",
-    body: JSON.stringify(data),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-};
-
 export default function ImageViewer({
   file,
-  linkId,
-  documentId,
-  viewId,
-  assistantEnabled,
-  allowDownload,
-  feedbackEnabled,
   screenshotProtectionEnabled,
   versionNumber,
-  brand,
-  documentName,
-  dataroomId,
-  setDocumentData,
   showPoweredByBanner,
-  showAccountCreationSlide,
-  enableQuestion = false,
-  feedback,
   viewerEmail,
-  isPreview,
   watermarkConfig,
   ipAddress,
   linkName,
+  navData,
 }: {
   file: string;
-  linkId: string;
-  documentId: string;
-  viewId?: string;
-  assistantEnabled?: boolean;
-  allowDownload: boolean;
-  feedbackEnabled: boolean;
   screenshotProtectionEnabled: boolean;
   versionNumber: number;
-  brand?: Partial<Brand> | Partial<DataroomBrand> | null;
-  documentName?: string;
-  dataroomId?: string;
-  setDocumentData?: React.Dispatch<React.SetStateAction<TDocumentData | null>>;
   showPoweredByBanner?: boolean;
-  showAccountCreationSlide?: boolean;
-  enableQuestion?: boolean | null;
-  feedback?: {
-    id: string;
-    data: { question: string; type: string };
-  } | null;
   viewerEmail?: string;
-  isPreview?: boolean;
   watermarkConfig?: WatermarkConfig | null;
   ipAddress?: string;
   linkName?: string;
+  navData: TNavData;
 }) {
   const router = useRouter();
 
-  const numPages = 1;
+  const { isPreview, linkId, documentId, viewId, dataroomId } = navData;
 
-  const [pageNumber, setPageNumber] = useState<number>(1); // start on first page
+  const numPages = 1;
+  const pageNumber = 1;
 
   const [scale, setScale] = useState<number>(1);
   const [isWindowFocused, setIsWindowFocused] = useState(true);
@@ -103,12 +52,24 @@ export default function ImageViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRefs = useRef<HTMLImageElement | null>(null);
 
+  const trackingOptions = getTrackingOptions();
+  const {
+    trackPageViewSafely,
+    resetTrackingState,
+    startIntervalTracking,
+    stopIntervalTracking,
+    getActiveDuration,
+    isInactive,
+    updateActivity,
+  } = useSafePageViewTracker({
+    ...trackingOptions,
+    externalStartTimeRef: startTimeRef,
+  });
+
   const [imageDimensions, setImageDimensions] = useState<{
     width: number;
     height: number;
   } | null>(null);
-
-  const { isMobile } = useMediaQuery();
 
   // Add zoom handlers
   const handleZoomIn = () => {
@@ -119,9 +80,30 @@ export default function ImageViewer({
     setScale((prev) => Math.max(prev - 0.25, 0.5)); // Min zoom 0.5x
   };
 
-  // Add keyboard shortcuts for zooming
+  // Add fullscreen handler
+  const handleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error("Error attempting to enable fullscreen:", err);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  // Add keyboard shortcuts for zooming and fullscreen
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs or textareas
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
       if (e.metaKey || e.ctrlKey) {
         if (e.key === "=" || e.key === "+") {
           e.preventDefault();
@@ -133,6 +115,9 @@ export default function ImageViewer({
           e.preventDefault();
           setScale(1);
         }
+      } else if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        handleFullscreen();
       }
     };
 
@@ -159,20 +144,29 @@ export default function ImageViewer({
     return () => {
       window.removeEventListener("resize", updateImageDimensions);
     };
-  }, [pageNumber]);
+  }, [scale]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (pageNumber > numPages) return;
-
       if (document.visibilityState === "visible") {
         visibilityRef.current = true;
-        startTimeRef.current = Date.now(); // Reset start time when the page becomes visible again
+        resetTrackingState();
+        const trackingData = {
+          linkId,
+          documentId,
+          viewId,
+          pageNumber: pageNumber,
+          versionNumber,
+          dataroomId,
+          isPreview,
+        };
+        startIntervalTracking(trackingData);
       } else {
         visibilityRef.current = false;
-        if (pageNumber <= numPages) {
-          const duration = Date.now() - startTimeRef.current;
-          trackPageView({
+        stopIntervalTracking();
+        const duration = getActiveDuration();
+        trackPageViewSafely(
+          {
             linkId,
             documentId,
             viewId,
@@ -181,8 +175,9 @@ export default function ImageViewer({
             versionNumber,
             dataroomId,
             isPreview,
-          });
-        }
+          },
+          true,
+        );
       }
     };
 
@@ -191,31 +186,26 @@ export default function ImageViewer({
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [pageNumber, numPages]);
-
-  useEffect(() => {
-    startTimeRef.current = Date.now();
-
-    if (visibilityRef.current && pageNumber <= numPages) {
-      const duration = Date.now() - startTimeRef.current;
-      trackPageView({
-        linkId,
-        documentId,
-        viewId,
-        duration,
-        pageNumber: pageNumber,
-        versionNumber,
-        dataroomId,
-        isPreview,
-      });
-    }
-  }, [pageNumber, numPages]);
+  }, [
+    linkId,
+    documentId,
+    viewId,
+    versionNumber,
+    dataroomId,
+    isPreview,
+    trackPageViewSafely,
+    resetTrackingState,
+    startIntervalTracking,
+    stopIntervalTracking,
+    getActiveDuration,
+  ]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (pageNumber <= numPages) {
-        const duration = Date.now() - startTimeRef.current;
-        trackPageView({
+      stopIntervalTracking();
+      const duration = getActiveDuration();
+      trackPageViewSafely(
+        {
           linkId,
           documentId,
           viewId,
@@ -224,8 +214,9 @@ export default function ImageViewer({
           versionNumber,
           dataroomId,
           isPreview,
-        });
-      }
+        },
+        true,
+      );
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -233,7 +224,17 @@ export default function ImageViewer({
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [pageNumber, numPages]);
+  }, [
+    linkId,
+    documentId,
+    viewId,
+    versionNumber,
+    dataroomId,
+    isPreview,
+    trackPageViewSafely,
+    stopIntervalTracking,
+    getActiveDuration,
+  ]);
 
   // Add this effect near your other useEffect hooks
   useEffect(() => {
@@ -273,24 +274,43 @@ export default function ImageViewer({
     }
   }, []); // Run once on mount
 
+  // Start interval tracking when component mounts
+  useEffect(() => {
+    const trackingData = {
+      linkId,
+      documentId,
+      viewId,
+      pageNumber: pageNumber,
+      versionNumber,
+      dataroomId,
+      isPreview,
+    };
+    startIntervalTracking(trackingData);
+
+    return () => {
+      stopIntervalTracking();
+    };
+  }, [
+    linkId,
+    documentId,
+    viewId,
+    versionNumber,
+    dataroomId,
+    isPreview,
+    startIntervalTracking,
+    stopIntervalTracking,
+  ]);
+
   return (
     <>
       <Nav
         pageNumber={pageNumber}
         numPages={numPages}
-        allowDownload={allowDownload}
-        brand={brand}
-        viewId={viewId}
-        linkId={linkId}
-        documentId={documentId}
-        documentName={documentName}
-        isDataroom={!!dataroomId}
-        setDocumentData={setDocumentData}
-        isMobile={isMobile}
-        isPreview={isPreview}
         hasWatermark={!!watermarkConfig}
         handleZoomIn={handleZoomIn}
         handleZoomOut={handleZoomOut}
+        handleFullscreen={handleFullscreen}
+        navData={navData}
       />
       <div
         style={{ height: "calc(100dvh - 64px)" }}
@@ -305,51 +325,72 @@ export default function ImageViewer({
           )}
           ref={containerRef}
         >
-          <div className={cn("h-full w-full", scale > 1 && "overflow-auto")}>
+          {/* Scroll Container */}
+          <div className="h-full w-full overflow-auto">
+            {/* Sizer defines scrollable dimensions at current scale */}
             <div
-              className="flex min-h-full w-full items-center justify-center"
+              className="mx-auto"
               style={{
-                transform: `scale(${scale})`,
-                transition: "transform 0.2s ease-out",
-                transformOrigin: scale <= 1 ? "center center" : "left top",
-                minWidth: scale > 1 ? `${100 * scale}%` : "100%",
+                width:
+                  imageDimensions && scale > 1
+                    ? `${imageDimensions.width * scale}px`
+                    : "100%",
+                height:
+                  imageDimensions && scale > 1
+                    ? `${imageDimensions.height * scale}px`
+                    : "auto",
               }}
-              onContextMenu={(e) => e.preventDefault()}
             >
-              <div className="viewer-container relative my-auto flex w-full justify-center">
-                <img
-                  className="!pointer-events-auto max-h-[calc(100dvh-64px)] object-contain"
-                  ref={(ref) => {
-                    imageRefs.current = ref;
-                    if (ref) {
-                      ref.onload = () =>
-                        setImageDimensions({
-                          width: ref.clientWidth,
-                          height: ref.clientHeight,
-                        });
-                    }
-                  }}
-                  src={file}
-                  alt="Image 1"
-                />
-
-                {/* Add Watermark Component */}
-                {watermarkConfig ? (
-                  <SVGWatermark
-                    config={watermarkConfig}
-                    viewerData={{
-                      email: viewerEmail,
-                      date: new Date().toLocaleDateString(),
-                      time: new Date().toLocaleTimeString(),
-                      link: linkName,
-                      ipAddress: ipAddress,
+              {/* Scaled content */}
+              <div
+                style={{
+                  transition: "transform 0.2s ease-out",
+                  transformOrigin: "center top",
+                  transform: `scale(${scale})`,
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+              >
+                <div className="viewer-container relative mx-auto flex w-full justify-center">
+                  <img
+                    className="viewer-image-mobile !pointer-events-auto max-h-[calc(100dvh-64px)] object-contain"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                     }}
-                    documentDimensions={
-                      imageDimensions ?? { width: 0, height: 0 }
-                    }
-                    pageIndex={0}
+                    ref={(ref) => {
+                      imageRefs.current = ref;
+                      if (ref) {
+                        ref.onload = () =>
+                          setImageDimensions({
+                            width: ref.clientWidth,
+                            height: ref.clientHeight,
+                          });
+                      }
+                    }}
+                    src={file}
+                    alt="Image 1"
                   />
-                ) : null}
+
+                  {watermarkConfig ? (
+                    <SVGWatermark
+                      config={watermarkConfig}
+                      viewerData={{
+                        email: viewerEmail,
+                        date: new Date().toLocaleDateString(),
+                        time: new Date().toLocaleTimeString(),
+                        link: linkName,
+                        ipAddress: ipAddress,
+                      }}
+                      documentDimensions={
+                        imageDimensions ?? { width: 0, height: 0 }
+                      }
+                      pageIndex={0}
+                    />
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -358,6 +399,11 @@ export default function ImageViewer({
         {screenshotProtectionEnabled ? <ScreenProtector /> : null}
         {showPoweredByBanner ? <PoweredBy linkId={linkId} /> : null}
       </div>
+      <AwayPoster
+        isVisible={isInactive}
+        inactivityThreshold={trackingOptions.inactivityThreshold || 60000}
+        onDismiss={updateActivity}
+      />
     </>
   );
 }

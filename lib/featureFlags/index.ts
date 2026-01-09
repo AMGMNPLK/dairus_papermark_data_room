@@ -4,8 +4,18 @@ export type BetaFeatures =
   | "tokens"
   | "incomingWebhooks"
   | "roomChangeNotifications"
-  | "embedding"
-  | "webhooks";
+  | "webhooks"
+  | "conversations"
+  | "dataroomUpload"
+  | "inDocumentLinks"
+  | "usStorage"
+  | "dataroomIndex"
+  | "slack"
+  | "annotations"
+  | "dataroomInvitations"
+  | "workflows"
+  | "ai";
+
 type BetaFeaturesRecord = Record<BetaFeatures, string[]>;
 
 export const getFeatureFlags = async ({ teamId }: { teamId?: string }) => {
@@ -13,14 +23,23 @@ export const getFeatureFlags = async ({ teamId }: { teamId?: string }) => {
     tokens: false,
     incomingWebhooks: false,
     roomChangeNotifications: false,
-    embedding: false,
     webhooks: false,
+    conversations: false,
+    dataroomUpload: false,
+    inDocumentLinks: false,
+    usStorage: false,
+    dataroomIndex: false,
+    slack: false,
+    annotations: false,
+    dataroomInvitations: false,
+    workflows: false,
+    ai: false,
   };
 
-  // Return all features as true if edge config is not available
+  // Return all features as false if edge config is not available
   if (!process.env.EDGE_CONFIG) {
     return Object.fromEntries(
-      Object.entries(teamFeatures).map(([key, _v]) => [key, true]),
+      Object.entries(teamFeatures).map(([key, _v]) => [key, false]),
     );
   } else if (!teamId) {
     return teamFeatures;

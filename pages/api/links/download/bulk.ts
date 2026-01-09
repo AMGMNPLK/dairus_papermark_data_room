@@ -1,13 +1,17 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { getTeamStorageConfigById } from "@/ee/features/storage/config";
 import { InvocationType, InvokeCommand } from "@aws-sdk/client-lambda";
 import { ItemType, ViewType } from "@prisma/client";
 
-import { getLambdaClient } from "@/lib/files/aws-client";
+import { getLambdaClientForTeam } from "@/lib/files/aws-client";
+import { notifyDocumentDownload } from "@/lib/integrations/slack/events";
 import prisma from "@/lib/prisma";
+import { getIpAddress } from "@/lib/utils/ip";
 
 export const config = {
-  maxDuration: 180,
+  maxDuration: 300,
+  memory: 2048,
 };
 
 export default async function handle(
@@ -28,16 +32,28 @@ export default async function handle(
         select: {
           id: true,
           viewedAt: true,
+          viewerEmail: true,
+          viewerId: true,
+          verified: true,
           link: {
             select: {
               allowDownload: true,
               expiresAt: true,
               isArchived: true,
+              deletedAt: true,
+              enableWatermark: true,
+              watermarkConfig: true,
+              name: true,
+              permissionGroupId: true,
             },
           },
           groupId: true,
           dataroom: {
             select: {
+              id: true,
+              name: true,
+              teamId: true,
+              allowBulkDownload: true,
               folders: {
                 select: {
                   id: true,
@@ -51,6 +67,7 @@ export default async function handle(
                   folderId: true,
                   document: {
                     select: {
+                      id: true,
                       name: true,
                       versions: {
                         where: { isPrimary: true },
@@ -60,6 +77,7 @@ export default async function handle(
                           storageType: true,
                           originalFile: true,
                           contentType: true,
+                          numPages: true,
                         },
                         take: 1,
                       },
@@ -87,6 +105,10 @@ export default async function handle(
         return res.status(403).json({ error: "Error downloading" });
       }
 
+      if (view.link.deletedAt) {
+        return res.status(403).json({ error: "Error downloading" });
+      }
+
       // if link is expired, we should not allow the download
       if (view.link.expiresAt && view.link.expiresAt < new Date()) {
         return res.status(403).json({ error: "Error downloading" });
@@ -97,10 +119,17 @@ export default async function handle(
         return res.status(404).json({ error: "Error downloading" });
       }
 
-      // if viewedAt is longer than 30 mins ago, we should not allow the download
+      // if dataroom does not allow bulk download, we should not allow the download
+      if (!view.dataroom.allowBulkDownload) {
+        return res
+          .status(403)
+          .json({ error: "Bulk download is disabled for this dataroom" });
+      }
+
+      // if viewedAt is longer than 23 hours ago, we should not allow the download
       if (
         view.viewedAt &&
-        view.viewedAt < new Date(Date.now() - 30 * 60 * 1000)
+        view.viewedAt < new Date(Date.now() - 23 * 60 * 60 * 1000)
       ) {
         return res.status(403).json({ error: "Error downloading" });
       }
@@ -108,14 +137,27 @@ export default async function handle(
       let downloadFolders = view.dataroom.folders;
       let downloadDocuments = view.dataroom.documents;
 
-      // if groupId is not null,
-      // we should find the group permissions
-      // and reduce the number of documents and folders to download
-      if (view.groupId) {
-        const groupPermissions =
-          await prisma.viewerGroupAccessControls.findMany({
+      // Check permissions based on groupId (ViewerGroup) or permissionGroupId (PermissionGroup)
+      const effectiveGroupId = view.groupId || view.link.permissionGroupId;
+
+      if (effectiveGroupId) {
+        let groupPermissions: any[] = [];
+
+        if (view.groupId) {
+          // This is a ViewerGroup (legacy behavior)
+          groupPermissions = await prisma.viewerGroupAccessControls.findMany({
             where: { groupId: view.groupId, canDownload: true },
           });
+        } else if (view.link.permissionGroupId) {
+          // This is a PermissionGroup (new behavior)
+          groupPermissions =
+            await prisma.permissionGroupAccessControls.findMany({
+              where: {
+                groupId: view.link.permissionGroupId,
+                canDownload: true,
+              },
+            });
+        }
 
         const permittedFolderIds = groupPermissions
           .filter(
@@ -136,10 +178,49 @@ export default async function handle(
         );
       }
 
-      // update the view with the downloadedAt timestamp
-      await prisma.view.update({
-        where: { id: viewId },
-        data: { downloadedAt: new Date() },
+      // Don't update DATAROOM_VIEW downloadedAt - we'll show the grouped bulk download entry instead
+
+      // Create individual document views for each document being downloaded
+      const downloadableDocuments = downloadDocuments.filter(
+        (doc) =>
+          doc.document.versions[0] &&
+          doc.document.versions[0].type !== "notion" &&
+          doc.document.versions[0].storageType !== "VERCEL_BLOB",
+      );
+
+      // For bulk downloads, only store metadata if there are less than 100 documents
+      // to avoid storing huge JSON objects
+      const downloadMetadata =
+        downloadableDocuments.length < 100
+          ? {
+              dataroomName: view.dataroom!.name,
+              documentCount: downloadableDocuments.length,
+              documents: downloadableDocuments.map((doc) => ({
+                id: doc.document.id,
+                name: doc.document.name,
+              })),
+            }
+          : {
+              dataroomName: view.dataroom!.name,
+              documentCount: downloadableDocuments.length,
+            };
+
+      await prisma.view.createMany({
+        data: downloadableDocuments.map((doc) => ({
+          viewType: "DOCUMENT_VIEW",
+          documentId: doc.document.id,
+          linkId: linkId,
+          dataroomId: view.dataroom!.id,
+          groupId: view.groupId,
+          dataroomViewId: view.id,
+          viewerEmail: view.viewerEmail,
+          downloadedAt: new Date(),
+          downloadType: "BULK",
+          downloadMetadata: downloadMetadata,
+          viewerId: view.viewerId,
+          verified: view.verified,
+        })),
+        skipDuplicates: true,
       });
 
       // Construct folderStructure and fileKeys
@@ -147,7 +228,13 @@ export default async function handle(
         [key: string]: {
           name: string;
           path: string;
-          files: { name: string; key: string }[];
+          files: {
+            name: string;
+            key: string;
+            type?: string;
+            numPages?: number;
+            needsWatermark?: boolean;
+          }[];
         };
       } = {};
       const fileKeys: string[] = [];
@@ -160,28 +247,12 @@ export default async function handle(
         ]),
       );
 
-      // Helper function to add a file to the structure
-      // const addFileToStructure = (
-      //   path: string,
-      //   fileName: string,
-      //   fileKey: string,
-      // ) => {
-      //   const folderInfo = folderMap.get(path) || { name: "Root", id: null };
-      //   if (!folderStructure[path]) {
-      //     folderStructure[path] = {
-      //       name: folderInfo.name,
-      //       path: path,
-      //       files: [],
-      //     };
-      //   }
-      //   folderStructure[path].files.push({ name: fileName, key: fileKey });
-      //   fileKeys.push(fileKey);
-      // };
-
       const addFileToStructure = (
         path: string,
         fileName: string,
         fileKey: string,
+        fileType?: string,
+        numPages?: number,
       ) => {
         const pathParts = path.split("/").filter(Boolean);
         let currentPath = "";
@@ -208,7 +279,18 @@ export default async function handle(
             files: [],
           };
         }
-        folderStructure[path].files.push({ name: fileName, key: fileKey });
+
+        const needsWatermark =
+          view.link.enableWatermark &&
+          (fileType === "pdf" || fileType === "image");
+
+        folderStructure[path].files.push({
+          name: fileName,
+          key: fileKey,
+          type: fileType,
+          numPages: numPages,
+          needsWatermark: needsWatermark ?? undefined,
+        });
         fileKeys.push(fileKey);
       };
 
@@ -217,14 +299,21 @@ export default async function handle(
         .filter((doc) => !doc.folderId)
         .filter((doc) => doc.document.versions[0].type !== "notion")
         .filter((doc) => doc.document.versions[0].storageType !== "VERCEL_BLOB")
-        .forEach((doc) =>
+        .forEach((doc) => {
+          const fileKey =
+            view.link.enableWatermark && doc.document.versions[0].type === "pdf"
+              ? doc.document.versions[0].file
+              : (doc.document.versions[0].originalFile ??
+                doc.document.versions[0].file);
+
           addFileToStructure(
             "/",
             doc.document.name,
-            doc.document.versions[0].originalFile ??
-              doc.document.versions[0].file,
-          ),
-        );
+            fileKey,
+            doc.document.versions[0].type ?? undefined,
+            doc.document.versions[0].numPages ?? undefined,
+          );
+        });
 
       // Add documents in folders
       downloadFolders.forEach((folder) => {
@@ -236,14 +325,23 @@ export default async function handle(
           );
 
         folderDocs &&
-          folderDocs.forEach((doc) =>
+          folderDocs.forEach((doc) => {
+            // Use .file if watermark is enabled and document is PDF, otherwise use .originalFile
+            const fileKey =
+              view.link.enableWatermark &&
+              doc.document.versions[0].type === "pdf"
+                ? doc.document.versions[0].file
+                : (doc.document.versions[0].originalFile ??
+                  doc.document.versions[0].file);
+
             addFileToStructure(
               folder.path,
               doc.document.name,
-              doc.document.versions[0].originalFile ??
-                doc.document.versions[0].file,
-            ),
-          );
+              fileKey,
+              doc.document.versions[0].type ?? undefined,
+              doc.document.versions[0].numPages ?? undefined,
+            );
+          });
 
         // If the folder is empty, ensure it's still added to the structure
         if (folderDocs && folderDocs.length === 0) {
@@ -251,15 +349,62 @@ export default async function handle(
         }
       });
 
-      const client = getLambdaClient();
+      if (fileKeys.length === 0) {
+        return res.status(404).json({ error: "No files to download" });
+      }
+
+      if (view.dataroom?.teamId) {
+        try {
+          await notifyDocumentDownload({
+            teamId: view.dataroom.teamId,
+            documentId: undefined, // Bulk download, no specific document
+            dataroomId: view.dataroom.id,
+            linkId,
+            viewerEmail: view.viewerEmail ?? undefined,
+            viewerId: view.viewerId ?? undefined,
+            metadata: {
+              documentCount: downloadDocuments.length,
+              isBulkDownload: true,
+            },
+          });
+        } catch (error) {
+          console.error("Error sending Slack notification:", error);
+        }
+      }
+
+      // Get team-specific storage configuration
+      const teamId = view.dataroom!.teamId;
+      const [client, storageConfig] = await Promise.all([
+        getLambdaClientForTeam(teamId),
+        getTeamStorageConfigById(teamId),
+      ]);
 
       const params = {
-        FunctionName: `bulk-download-zip-creator-${process.env.NODE_ENV === "development" ? "dev" : "prod"}`, // Use the name you gave your Lambda function
+        FunctionName: storageConfig.lambdaFunctionName,
         InvocationType: InvocationType.RequestResponse,
         Payload: JSON.stringify({
-          sourceBucket: process.env.NEXT_PRIVATE_UPLOAD_BUCKET,
+          sourceBucket: storageConfig.bucket,
           fileKeys: fileKeys,
           folderStructure: folderStructure,
+          watermarkConfig: view.link.enableWatermark
+            ? {
+                enabled: true,
+                config: view.link.watermarkConfig,
+                viewerData: {
+                  email: view.viewerEmail,
+                  date: (view.viewedAt
+                    ? new Date(view.viewedAt)
+                    : new Date()
+                  ).toLocaleDateString(),
+                  time: (view.viewedAt
+                    ? new Date(view.viewedAt)
+                    : new Date()
+                  ).toLocaleTimeString(),
+                  link: view.link.name,
+                  ipAddress: getIpAddress(req.headers),
+                },
+              }
+            : { enabled: false },
         }),
       };
 

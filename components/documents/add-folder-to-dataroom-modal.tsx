@@ -1,3 +1,5 @@
+import { useRouter } from "next/router";
+
 import { useState } from "react";
 
 import { useTeam } from "@/context/team-context";
@@ -39,6 +41,7 @@ export function AddFolderToDataroomModal({
   folderName?: string;
   dataroomId?: string;
 }) {
+  const router = useRouter();
   const [selectedDataroom, setSelectedDataroom] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -79,7 +82,19 @@ export function AddFolderToDataroomModal({
       dataroomId &&
         mutate(`/api/teams/${teamId}/datarooms/${dataroomId}/folders`);
 
-      toast.success("Folder added to dataroom successfully!");
+      const dataroomName = datarooms?.find(
+        (d) => d.id === selectedDataroom,
+      )?.name;
+
+      toast.success(`Folder added successfully!`, {
+        description: `${folderName?.trim()} → ${dataroomName}`,
+        action: {
+          label: "Open Dataroom",
+          onClick: () =>
+            router.push(`/datarooms/${selectedDataroom}/documents`),
+        },
+        duration: 10000,
+      });
     } catch (error) {
       console.error("Error adding folder to dataroom", error);
       toast.error("Failed to add folder to dataroom. Try again.");
@@ -99,18 +114,21 @@ export function AddFolderToDataroomModal({
           <DialogDescription>Add your folder to a dataroom.</DialogDescription>
         </DialogHeader>
         <Select onValueChange={(value) => setSelectedDataroom(value)}>
-          <SelectTrigger className="min-w-fit">
+          <SelectTrigger className="w-[380px] max-w-full [&>span]:truncate [&>span]:max-w-full [&>span]:overflow-hidden [&>span]:text-ellipsis [&>span]:whitespace-nowrap">
             <SelectValue placeholder="Select a dataroom" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="w-[380px] max-w-[90vw]">
             {datarooms?.map((dataroom) => (
               <SelectItem
                 key={dataroom.id}
                 value={dataroom.id}
                 disabled={dataroom.id === dataroomId}
+                className="break-words"
               >
-                {dataroom.name}
-                {dataroom.id === dataroomId ? " (current)" : ""}
+                <span className="break-words line-clamp-1">
+                  {dataroom.name}
+                  {dataroom.id === dataroomId ? " (current)" : ""}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -128,15 +146,15 @@ export function AddFolderToDataroomModal({
               {!selectedDataroom ? (
                 "Select a dataroom"
               ) : (
-                <>
-                  Add to{" "}
-                  <span className="font-medium">
+                <span className="flex items-center justify-center w-full max-w-[350px] truncate">
+                  Add to
+                  <span className="font-medium truncate line-clamp-1 ml-1">
                     {
                       datarooms?.filter((d) => d.id === selectedDataroom)[0]
                         .name
                     }
                   </span>
-                </>
+                </span>
               )}
             </Button>
           </DialogFooter>

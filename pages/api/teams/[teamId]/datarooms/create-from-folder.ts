@@ -157,7 +157,7 @@ export default async function handle(
 
       if (
         !team.plan.includes("drtrial") &&
-        ["business", "datarooms", "datarooms-plus"].includes(stripedTeamPlan) &&
+        ["business", "datarooms", "datarooms-plus", "datarooms-premium"].includes(stripedTeamPlan) &&
         limits &&
         team._count.datarooms >= limits.datarooms
       ) {
@@ -173,7 +173,7 @@ export default async function handle(
           .json({ message: "Trial data room already exists" });
       }
 
-      if (["free", "pro"].includes(team.plan)) {
+      if (["free", "pro"].includes(team.plan) && !team.plan.includes("drtrial")) {
         return res
           .status(400)
           .json({ message: "You need a Business plan to create a data room" });

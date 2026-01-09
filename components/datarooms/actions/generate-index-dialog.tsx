@@ -9,7 +9,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { UpgradePlanModal } from "@/components/billing/upgrade-plan-modal";
+import { useAnalytics } from "@/lib/analytics";
+import { usePlan } from "@/lib/swr/use-billing";
+import { useDataroomLinks } from "@/lib/swr/use-dataroom";
+import { IndexFileFormat } from "@/lib/types/index-file";
+
+import { UpgradePlanModalWithDiscount } from "@/components/billing/upgrade-plan-modal-with-discount";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,6 +25,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ResponsiveButton } from "@/components/ui/responsive-button";
 import {
   Select,
   SelectContent,
@@ -28,11 +34,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-
-import { useAnalytics } from "@/lib/analytics";
-import { usePlan } from "@/lib/swr/use-billing";
-import { useDataroomLinks } from "@/lib/swr/use-dataroom";
-import { IndexFileFormat } from "@/lib/types/index-file";
 
 interface GenerateIndexDialogProps {
   teamId: string;
@@ -99,13 +100,17 @@ export default function GenerateIndexDialog({
 
       // Create a download link and trigger it
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+      }, 100);
 
       analytics.capture("Generate Index File", {
         teamId,
@@ -131,10 +136,13 @@ export default function GenerateIndexDialog({
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled}>
-          <FileSlidersIcon />
-          Generate Index File
-        </Button>
+        <ResponsiveButton
+          icon={<FileSlidersIcon className="h-4 w-4" />}
+          text="Generate Index"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+        />
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -216,12 +224,12 @@ export default function GenerateIndexDialog({
               {isLoading ? "Generating..." : "Generate"}
             </Button>
           ) : (
-            <UpgradePlanModal
+            <UpgradePlanModalWithDiscount
               clickedPlan={PlanEnum.DataRooms}
               trigger="datarooms_generate_index_button"
             >
               <Button>Upgrade to generate</Button>
-            </UpgradePlanModal>
+            </UpgradePlanModalWithDiscount>
           )}
         </DialogFooter>
       </DialogContent>

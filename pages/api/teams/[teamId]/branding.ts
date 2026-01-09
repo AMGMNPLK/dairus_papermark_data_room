@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
+import { redis } from "@/lib/redis";
 import { CustomUser } from "@/lib/types";
 
 import { authOptions } from "../../auth/[...nextauth]";
@@ -58,41 +59,71 @@ export default async function handle(
     return res.status(200).json(brand);
   } else if (req.method === "POST") {
     // POST /api/teams/:teamId/branding
-    const { logo, brandColor, accentColor } = req.body as {
+    const { logo, banner, brandColor, accentColor, welcomeMessage } = req.body as {
       logo?: string;
+      banner?: string;
       brandColor?: string;
       accentColor?: string;
+      welcomeMessage?: string;
     };
 
     // update team with new branding
     const brand = await prisma.brand.create({
       data: {
         logo: logo,
+        banner,
         brandColor,
         accentColor,
+        welcomeMessage,
         teamId: teamId,
       },
     });
+
+    // Cache the logo URL in Redis if logo exists
+    if (logo) {
+      await redis.set(`brand:logo:${teamId}`, logo);
+    }
 
     return res.status(200).json(brand);
   } else if (req.method === "PUT") {
     // PUT /api/teams/:teamId/branding
-    const { logo, brandColor, accentColor } = req.body as {
+    const { logo, banner, brandColor, accentColor, welcomeMessage } = req.body as {
       logo?: string;
+      banner?: string;
       brandColor?: string;
       accentColor?: string;
+      welcomeMessage?: string;
     };
 
-    const brand = await prisma.brand.update({
+    // Use upsert to handle both create and update cases
+    const brand = await prisma.brand.upsert({
       where: {
         teamId: teamId,
       },
-      data: {
+      create: {
         logo,
+        banner,
         brandColor,
         accentColor,
+        welcomeMessage,
+        teamId: teamId,
+      },
+      update: {
+        logo,
+        banner,
+        brandColor,
+        accentColor,
+        welcomeMessage,
       },
     });
+
+    // Update logo in Redis cache
+    if (logo) {
+      await redis.set(`brand:logo:${teamId}`, logo);
+    } else {
+      // If logo is null or undefined, delete the cache
+      await redis.del(`brand:logo:${teamId}`);
+    }
 
     return res.status(200).json(brand);
   } else if (req.method === "DELETE") {
@@ -101,12 +132,18 @@ export default async function handle(
       where: {
         teamId: teamId,
       },
-      select: { id: true, logo: true },
+      select: { id: true, logo: true, banner: true },
     });
 
-    if (brand && brand.logo) {
+    if (brand) {
       // delete the logo from vercel blob
-      await del(brand.logo);
+      if (brand.logo) {
+        await del(brand.logo);
+      }
+      // delete the banner from vercel blob
+      if (brand.banner) {
+        await del(brand.banner);
+      }
     }
 
     // delete the branding from database
@@ -115,6 +152,9 @@ export default async function handle(
         id: brand?.id,
       },
     });
+
+    // Remove logo from Redis cache
+    await redis.del(`brand:logo:${teamId}`);
 
     return res.status(204).end();
   } else {

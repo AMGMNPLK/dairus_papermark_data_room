@@ -2,14 +2,51 @@ import { useRouter } from "next/router";
 
 import { memo, useMemo } from "react";
 
-import { FileTree } from "@/components/ui/nextra-filetree";
+import { HomeIcon } from "lucide-react";
 
 import {
   DataroomFolderWithDocuments,
   useDataroomFoldersTree,
 } from "@/lib/swr/use-dataroom";
+import { cn } from "@/lib/utils";
+import {
+  HIERARCHICAL_DISPLAY_STYLE,
+  useHierarchicalDisplayName,
+} from "@/lib/utils/hierarchical-display";
+import { sortByIndexThenName } from "@/lib/utils/sort-items-by-index-name";
+
+import { FileTree } from "@/components/ui/nextra-filetree";
 
 import { buildNestedFolderStructure } from "./utils";
+
+type MixedItem =
+  | (DataroomFolderWithDocuments & { itemType: "folder" })
+  | (DataroomFolderWithDocuments["documents"][0] & { itemType: "document" });
+
+const DocumentFileItem = memo(
+  ({
+    document,
+    router,
+  }: {
+    document: DataroomFolderWithDocuments["documents"][0] & {
+      itemType: "document";
+    };
+    router: any;
+  }) => {
+    const documentDisplayName = useHierarchicalDisplayName(
+      document.document.name,
+      document.hierarchicalIndex,
+    );
+
+    return (
+      <FileTree.File
+        name={documentDisplayName}
+        onToggle={() => router.push(`/documents/${document.document.id}`)}
+      />
+    );
+  },
+);
+DocumentFileItem.displayName = "DocumentFileItem";
 
 const FolderComponent = memo(
   ({
@@ -21,30 +58,45 @@ const FolderComponent = memo(
   }) => {
     const router = useRouter();
 
-    // Memoize the rendering of the current folder's documents
-    const documents = useMemo(
-      () =>
-        folder.documents.map((doc) => (
-          <FileTree.File
-            key={doc.id}
-            name={doc.document.name}
-            onToggle={() => router.push(`/documents/${doc.document.id}`)}
-          />
-        )),
-      [folder.documents, dataroomId, router.query.name],
+    // Get hierarchical display names
+    const folderDisplayName = useHierarchicalDisplayName(
+      folder.name,
+      folder.hierarchicalIndex,
     );
 
-    // Recursively render child folders if they exist
-    const childFolders = useMemo(
+    const mixedItems = useMemo(() => {
+      const allItems: MixedItem[] = [
+        ...(folder.childFolders || []).map((f) => ({
+          ...f,
+          itemType: "folder" as const,
+        })),
+        ...(folder.documents || []).map((d) => ({
+          ...d,
+          itemType: "document" as const,
+        })),
+      ];
+
+      return sortByIndexThenName(allItems);
+    }, [folder.childFolders, folder.documents]);
+
+    const renderedItems = useMemo(
       () =>
-        folder.childFolders.map((childFolder) => (
-          <FolderComponent
-            key={childFolder.id}
-            dataroomId={dataroomId}
-            folder={childFolder}
-          />
-        )),
-      [folder.childFolders, dataroomId],
+        mixedItems.map((item: MixedItem) => {
+          if (item.itemType === "folder") {
+            return (
+              <FolderComponent
+                key={item.id}
+                dataroomId={dataroomId}
+                folder={item}
+              />
+            );
+          } else {
+            return (
+              <DocumentFileItem key={item.id} document={item} router={router} />
+            );
+          }
+        }),
+      [mixedItems, dataroomId, router],
     );
 
     const isActive =
@@ -66,14 +118,13 @@ const FolderComponent = memo(
 
     return (
       <FileTree.Folder
-        name={folder.name}
+        name={folderDisplayName}
         key={folder.id}
         active={isActive}
         childActive={isChildActive}
         onToggle={handleFolderClick}
       >
-        {childFolders}
-        {documents}
+        {renderedItems}
       </FileTree.Folder>
     );
   },
@@ -96,6 +147,10 @@ const SidebarFolders = ({
 
   return (
     <FileTree>
+      <SidebarLink
+        href={`/datarooms/${dataroomId}/documents`}
+        label={"Dataroom Home"}
+      />
       {nestedFolders.map((folder) => (
         <FolderComponent
           key={folder.id}
@@ -114,3 +169,34 @@ export function SidebarFolderTree({ dataroomId }: { dataroomId: string }) {
 
   return <SidebarFolders dataroomId={dataroomId} folders={folders} />;
 }
+
+export const SidebarLink = memo(
+  ({ href, label }: { href: string; label: string }) => {
+    const router = useRouter();
+    const isActive = router.asPath === href;
+
+    return (
+      <li
+        className={cn(
+          "flex list-none",
+          "rounded-md text-foreground transition-all duration-200 ease-in-out",
+          "hover:bg-gray-100 hover:shadow-sm hover:dark:bg-muted",
+          "px-3 py-1.5 leading-6",
+          isActive && "bg-gray-100 font-semibold dark:bg-muted",
+        )}
+      >
+        <span
+          className="inline-flex w-full cursor-pointer items-center"
+          onClick={() => router.push(href)}
+        >
+          <HomeIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span className="ml-2 w-fit truncate" title={label}>
+            {label}
+          </span>
+        </span>
+      </li>
+    );
+  },
+);
+
+SidebarLink.displayName = "SidebarLink";

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useRouter } from "next/router";
 
 import { useEffect, useState } from "react";
@@ -6,6 +7,10 @@ import { useTeam } from "@/context/team-context";
 import { getPriceIdFromPlan } from "@/ee/stripe/functions/get-price-id-from-plan";
 import { getQuantityFromPriceId } from "@/ee/stripe/functions/get-quantity-from-plan";
 import { toast } from "sonner";
+
+import { useAnalytics } from "@/lib/analytics";
+import { usePlan } from "@/lib/swr/use-billing";
+import useLimits from "@/lib/swr/use-limits";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,10 +25,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import { useAnalytics } from "@/lib/analytics";
-import { usePlan } from "@/lib/swr/use-billing";
-import useLimits from "@/lib/swr/use-limits";
-
 export function AddSeatModal({
   open,
   setOpen,
@@ -37,17 +38,18 @@ export function AddSeatModal({
   const teamInfo = useTeam();
   const teamId = teamInfo?.currentTeam?.id;
   const analytics = useAnalytics();
-  const { plan: userPlan, planName, isAnnualPlan } = usePlan();
+  const { plan: userPlan, planName, isAnnualPlan, isOldAccount } = usePlan();
   const { limits } = useLimits();
 
   const [quantity, setQuantity] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(false);
 
   // Get the minimum quantity for the current plan
-  const priceId = getPriceIdFromPlan(
-    planName,
-    isAnnualPlan ? "yearly" : "monthly",
-  );
+  const priceId = getPriceIdFromPlan({
+    planSlug: userPlan,
+    isOld: isOldAccount,
+    period: isAnnualPlan ? "yearly" : "monthly",
+  });
   const minQuantity = getQuantityFromPriceId(priceId);
 
   // Set initial quantity to 1 (adding one seat)
@@ -58,7 +60,7 @@ export function AddSeatModal({
   }, [open]);
 
   // Calculate the total number of seats after the update
-  const totalSeatsAfterUpdate = limits ? limits.users + quantity : quantity;
+  const totalSeatsAfterUpdate = limits ? limits.users! + quantity : quantity;
 
   const handleDecrement = () => {
     if (quantity > 1) {
@@ -89,7 +91,7 @@ export function AddSeatModal({
 
       if (!response.ok) {
         const error = await response.json();
-        toast.error(error);
+        toast.error("Unable to add seats. Please contact support.");
         setLoading(false);
         return;
       }
@@ -179,10 +181,17 @@ export function AddSeatModal({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex flex-col gap-2 sm:flex-col sm:justify-center">
           <Button onClick={handleSubmit} className="w-full" disabled={loading}>
             {loading ? "Redirecting..." : "Proceed to checkout"}
           </Button>
+          <Link
+            href="/settings/upgrade-holiday-offer"
+            className="block w-full text-center text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            onClick={() => setOpen(false)}
+          >
+            or upgrade to higher plan
+          </Link>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -2,9 +2,9 @@ import React from "react";
 
 import {
   Body,
-  Button,
   Container,
   Head,
+  Heading,
   Hr,
   Html,
   Link,
@@ -14,111 +14,120 @@ import {
   Text,
 } from "@react-email/components";
 
+import { Footer } from "./shared/footer";
+
 interface WelcomeEmailProps {
   name: string | null | undefined;
 }
 
 const WelcomeEmail = ({ name }: WelcomeEmailProps) => {
-  const previewText = `The document sharing infrastructure for the modern web`;
-
   return (
     <Html>
       <Head />
-      <Preview>{previewText}</Preview>
+      <Preview>Welcome to Papermark</Preview>
       <Tailwind>
         <Body className="mx-auto my-auto bg-white font-sans">
-          <Container className="mx-auto my-10 w-[465px] p-5">
-            <Text className="mx-0 mb-8 mt-4 p-0 text-center text-2xl font-normal">
-              Welcome to{" "}
-              <span className="font-bold tracking-tighter">Papermark</span>
-            </Text>
-            <Text className="text-sm">
-              Thanks for signing up{name && `, ${name}`}!
-            </Text>
-            <Text className="text-sm">
-              My name is Marc, and I&apos;m the creator of Papermark – the
-              open-source DocSend alternative! I&apos;m excited to have you on
-              board!
-            </Text>
-            <Text className="text-sm">
-              Here are a few things you can do to get started:
-            </Text>
-            <Text className="text-sm">
-              <ul className="list-inside list-disc text-sm">
-                <li>Upload a document</li>
-                <li>Create a virtual data room</li>
-                <li>
-                  Share a link{" "}
-                  <span className="italic">(with your custom domain)✨</span>
-                </li>
-                <li>Watch the views come in real-time</li>
-              </ul>
-            </Text>
-            <Section className="mb-[32px] mt-[32px] text-center">
-              <Button
-                className="rounded bg-black text-center text-xs font-semibold text-white no-underline"
-                href={`${process.env.NEXT_PUBLIC_BASE_URL}/welcome`}
-                style={{ padding: "12px 20px" }}
-              >
-                Get Started
-              </Button>
-            </Section>
-            <Section>
-              <Text className="text-sm">
-                If you would like to keep up to date, you can:
-              </Text>
-              <Text className="text-sm">
-                <ul className="list-inside list-disc text-sm">
-                  <li>
-                    Star the repo on{" "}
-                    <Link
-                      href="https://github.com/mfts/papermark"
-                      target="_blank"
-                    >
-                      GitHub
-                    </Link>
-                  </li>
-                  <li>
-                    Follow the journey on{" "}
-                    <Link href="https://x.com/papermarkio" target="_blank">
-                      Twitter
-                    </Link>
-                  </li>
-                  <li>
-                    Have a call to talk enterprise{" "}
-                    <Link
-                      href="https://cal.com/marcseitz/papermark"
-                      target="_blank"
-                    >
-                      Book
-                    </Link>
-                  </li>
-                </ul>
+          <Container className="mx-auto my-10 max-w-[600px] rounded border border-solid border-neutral-200 px-10 py-5">
+            <Section className="mt-8">
+              <Text className="text-2xl font-bold tracking-tighter">
+                Papermark
               </Text>
             </Section>
-            <Section className="mt-4">
-              <Text className="text-sm">
-                If you have any questions or feedback just respond to this
-                email. I&apos;m always happy to help!
-              </Text>
-              <Text className="text-sm text-gray-400">Marc from Papermark</Text>
-            </Section>
+            <Heading className="mx-0 my-7 p-0 text-xl font-semibold text-black">
+              Welcome {name ? name : "to Papermark"}!
+            </Heading>
+            <Text className="mb-8 text-sm leading-6 text-gray-600">
+              Thank you for signing up for Papermark! You can now start sharing
+              documents securely, create data rooms, and track engagement in
+              real-time.
+            </Text>
+
             <Hr />
-            <Section className="mt-8 text-gray-400">
-              <Text className="text-xs">
-                © {new Date().getFullYear()}{" "}
-                <a
-                  href="https://www.papermark.com"
-                  className="text-gray-400 no-underline visited:text-gray-400 hover:text-gray-400"
-                  target="_blank"
-                >
-                  papermark.com
-                </a>
-              </Text>
-              <Text className="text-xs">
-                You will shortly receive the intro to Papermark. Stay tuned.
-              </Text>
+
+            <Heading className="mx-0 my-6 p-0 text-lg font-semibold text-black">
+              Getting started
+            </Heading>
+
+            <Text className="mb-4 text-sm leading-6 text-gray-600">
+              <strong className="font-medium text-black">
+                1. Upload your document
+              </strong>
+              : Simply{" "}
+              <Link
+                href="https://www.papermark.com/help/article/how-to-upload-document"
+                className="font-semibold text-black underline underline-offset-4"
+              >
+                drag and drop
+              </Link>{" "}
+              your PDF, spreadsheet, or presentation to create a shareable link.
+            </Text>
+
+            <Text className="mb-4 text-sm leading-6 text-gray-600">
+              <strong className="font-medium text-black">
+                2. Share securely
+              </strong>
+              : Add{" "}
+              <Link
+                href="https://www.papermark.com/help/article/require-email-verification"
+                className="font-semibold text-black underline underline-offset-4"
+              >
+                email verification
+              </Link>
+              ,{" "}
+              <Link
+                href="https://www.papermark.com/password-protection"
+                className="font-semibold text-black underline underline-offset-4"
+              >
+                password protection
+              </Link>
+              , or{" "}
+              <Link
+                href="https://www.papermark.com/help/article/expiration-date"
+                className="font-semibold text-black underline underline-offset-4"
+              >
+                link expiration
+              </Link>{" "}
+              to control access.
+            </Text>
+
+            <Text className="mb-4 text-sm leading-6 text-gray-600">
+              <strong className="font-medium text-black">
+                3. Track engagement
+              </strong>
+              : Watch{" "}
+              <Link
+                href="https://www.papermark.com/help/article/built-in-page-by-page-analytics"
+                className="font-semibold text-black underline underline-offset-4"
+              >
+                page-by-page analytics
+              </Link>{" "}
+              in real-time to see who&apos;s viewing your documents.
+            </Text>
+
+            <Text className="mb-8 text-sm leading-6 text-gray-600">
+              <strong className="font-medium text-black">
+                4. Create a data room
+              </strong>
+              :{" "}
+              <Link
+                href="https://www.papermark.com/help/article/create-data-room"
+                className="font-semibold text-black underline underline-offset-4"
+              >
+                Set up a secure data room
+              </Link>{" "}
+              for due diligence and enterprise document sharing.
+            </Text>
+
+            <Section className="mb-8">
+              <Link
+                className="rounded-lg bg-black px-6 py-3 text-center text-[12px] font-semibold text-white no-underline"
+                href={`${process.env.NEXT_PUBLIC_BASE_URL}/dashboard`}
+              >
+                Go to your dashboard
+              </Link>
             </Section>
+
+            <Footer marketing />
           </Container>
         </Body>
       </Tailwind>

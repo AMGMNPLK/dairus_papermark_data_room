@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useTeam } from "@/context/team-context";
 import { DocumentStorageType } from "@prisma/client";
@@ -10,11 +10,22 @@ import { toast } from "sonner";
 import { mutate } from "swr";
 
 import { useAnalytics } from "@/lib/analytics";
-import { SUPPORTED_DOCUMENT_MIME_TYPES } from "@/lib/constants";
+import {
+  FREE_PLAN_ACCEPTED_FILE_TYPES,
+  FULL_PLAN_ACCEPTED_FILE_TYPES,
+  SUPPORTED_DOCUMENT_MIME_TYPES,
+} from "@/lib/constants";
 import { DocumentData, createDocument } from "@/lib/documents/create-document";
 import { resumableUpload } from "@/lib/files/tus-upload";
+import {
+  createFolderInBoth,
+  createFolderInMainDocs,
+  determineFolderPaths,
+  isSystemFile,
+} from "@/lib/folders/create-folder";
 import { usePlan } from "@/lib/swr/use-billing";
 import useLimits from "@/lib/swr/use-limits";
+import { useTeamSettings } from "@/lib/swr/use-team-settings";
 import { CustomUser } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getSupportedContentType } from "@/lib/utils/get-content-type";
@@ -27,49 +38,48 @@ import { getPagesCount } from "@/lib/utils/get-page-number-count";
 // Originally these mime values were directly used in the dropzone hook.
 // There was a solid reason to take them out of the scope, primarily to solve a browser compatibility issue to determine the file type when user dropped a folder.
 // you will figure out how this change helped to fix the compatibility issue once you have went through reading of `getFilesFromDropEvent` and `traverseFolder`
-const acceptableDropZoneMimeTypesWhenIsFreePlanAndNotTrail = {
-  "application/pdf": [], // ".pdf"
-  "application/vnd.ms-excel": [], // ".xls"
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [], // ".xlsx"
-  "text/csv": [], // ".csv"
-  "application/vnd.oasis.opendocument.spreadsheet": [], // ".ods"
-  "image/png": [], // ".png"
-  "image/jpeg": [], // ".jpeg"
-  "image/jpg": [], // ".jpg"
-};
-const allAcceptableDropZoneMimeTypes = {
-  "application/pdf": [], // ".pdf"
-  "application/vnd.ms-excel": [], // ".xls"
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [], // ".xlsx"
-  "application/vnd.ms-excel.sheet.macroEnabled.12": [".xlsm"], // ".xlsm"
-  "text/csv": [], // ".csv"
-  "application/vnd.oasis.opendocument.spreadsheet": [], // ".ods"
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [], // ".docx"
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-    [], // ".pptx"
-  "application/vnd.ms-powerpoint": [], // ".ppt"
-  "application/msword": [], // ".doc"
-  "application/vnd.oasis.opendocument.text": [], // ".odt"
-  "application/vnd.oasis.opendocument.presentation": [], // ".odp"
-  "image/vnd.dwg": [".dwg"], // ".dwg"
-  "image/vnd.dxf": [".dxf"], // ".dxf"
-  "image/png": [], // ".png"
-  "image/jpeg": [], // ".jpeg"
-  "image/jpg": [], // ".jpg"
-  "application/zip": [], // ".zip"
-  "application/x-zip-compressed": [], // ".zip"
-  "video/mp4": [], // ".mp4"
-  "video/webm": [], // ".webm"
-  "video/quicktime": [], // ".mov"
-  "video/x-msvideo": [], // ".avi"
-  "video/ogg": [], // ".ogg"
-  "application/vnd.google-earth.kml+xml": [".kml"], // ".kml"
-  "application/vnd.google-earth.kmz": [".kmz"], // ".kmz"
-};
+const acceptableDropZoneMimeTypesWhenIsFreePlanAndNotTrial =
+  FREE_PLAN_ACCEPTED_FILE_TYPES;
+const allAcceptableDropZoneMimeTypes = FULL_PLAN_ACCEPTED_FILE_TYPES;
 
 interface FileWithPaths extends File {
   path?: string;
   whereToUploadPath?: string;
+  dataroomUploadPath?: string;
+}
+
+export interface UploadState {
+  fileName: string;
+  progress: number;
+  documentId?: string;
+  uploadId: string;
+}
+
+export interface RejectedFile {
+  fileName: string;
+  message: string;
+}
+
+interface UploadZoneProps extends React.PropsWithChildren {
+  onUploadStart: (uploads: UploadState[]) => void;
+  onUploadProgress: (
+    index: number,
+    progress: number,
+    documentId?: string,
+  ) => void;
+  onUploadRejected: (rejected: RejectedFile[]) => void;
+  onUploadSuccess?: (
+    files: {
+      fileName: string;
+      documentId: string;
+      dataroomDocumentId: string;
+    }[],
+  ) => void;
+  setUploads: React.Dispatch<React.SetStateAction<UploadState[]>>;
+  setRejectedFiles: React.Dispatch<React.SetStateAction<RejectedFile[]>>;
+  folderPathName?: string;
+  dataroomId?: string;
+  dataroomName?: string;
 }
 
 export default function UploadZone({
@@ -77,64 +87,133 @@ export default function UploadZone({
   onUploadStart,
   onUploadProgress,
   onUploadRejected,
+  onUploadSuccess,
   folderPathName,
   setUploads,
   setRejectedFiles,
   dataroomId,
-}: {
-  children: React.ReactNode;
-  onUploadStart: (
-    uploads: { fileName: string; progress: number; documentId?: string }[],
-  ) => void;
-  onUploadProgress: (
-    index: number,
-    progress: number,
-    documentId?: string,
-  ) => void;
-  onUploadRejected: (rejected: { fileName: string; message: string }[]) => void;
-  setUploads: React.Dispatch<
-    React.SetStateAction<
-      { fileName: string; progress: number; documentId?: string }[]
-    >
-  >;
-  setRejectedFiles: React.Dispatch<
-    React.SetStateAction<{ fileName: string; message: string }[]>
-  >;
-  folderPathName?: string;
-  dataroomId?: string;
-}) {
+  dataroomName,
+}: UploadZoneProps) {
   const analytics = useAnalytics();
-  const { plan, trial } = usePlan();
+  const { plan, isFree, isTrial } = usePlan();
   const router = useRouter();
   const teamInfo = useTeam();
   const { data: session } = useSession();
-  const isFreePlan = plan === "free";
-  const isTrial = !!trial;
-  // const maxSize = isFreePlan && !isTrial ? 30 : 350;
-  const maxNumPages = isFreePlan && !isTrial ? 100 : 500;
-  const { limits, canAddDocuments } = useLimits();
+  const { limits, canAddDocuments, isPaused } = useLimits();
   const remainingDocuments = limits?.documents
     ? limits?.documents - limits?.usage?.documents
     : 0;
 
-  const [progress, setProgress] = useState<number>(0);
-  const [showProgress, setShowProgress] = useState(false);
-  const uploadProgress = useRef<number[]>([]);
+  // Fetch team settings with proper revalidation - ensures settings stay fresh across tabs
+  const { settings: teamSettings } = useTeamSettings(teamInfo?.currentTeam?.id);
+  const replicateDataroomFolders =
+    teamSettings?.replicateDataroomFolders ?? true;
+
+  // Track if we've created the dataroom folder in "All Documents" for non-replication mode
+  // Using promise-lock pattern to prevent race conditions during concurrent folder creation
+  const dataroomFolderPathRef = useRef<string | null>(null);
+  const dataroomFolderCreationPromiseRef = useRef<Promise<string> | null>(null);
+
+  // Reset the cached dataroom folder path when the replication setting changes
+  // This ensures we don't use stale cached paths if the setting is toggled
+  useEffect(() => {
+    dataroomFolderPathRef.current = null;
+    dataroomFolderCreationPromiseRef.current = null;
+  }, [replicateDataroomFolders, dataroomId]);
 
   const fileSizeLimits = useMemo(
     () =>
       getFileSizeLimits({
         limits,
-        isFreePlan,
+        isFree,
         isTrial,
       }),
-    [limits, isFreePlan, isTrial],
+    [limits, isFree, isTrial],
   );
 
   const acceptableDropZoneFileTypes =
-    isFreePlan && !isTrial
-      ? acceptableDropZoneMimeTypesWhenIsFreePlanAndNotTrail
+    isFree && !isTrial
+      ? acceptableDropZoneMimeTypesWhenIsFreePlanAndNotTrial
       : allAcceptableDropZoneMimeTypes;
+
+  // Helper function to get or create the dataroom folder in "All Documents"
+  // Uses promise-lock pattern to prevent concurrent creation attempts
+  const getOrCreateDataroomFolder = useCallback(async (): Promise<string> => {
+    // If we already have the path cached, return it immediately
+    if (dataroomFolderPathRef.current) {
+      return dataroomFolderPathRef.current;
+    }
+
+    // If there's an ongoing creation, await it
+    if (dataroomFolderCreationPromiseRef.current) {
+      return dataroomFolderCreationPromiseRef.current;
+    }
+
+    // Start a new creation process
+    const creationPromise = (async () => {
+      try {
+        if (!teamInfo?.currentTeam?.id || !dataroomName) {
+          throw new Error("Missing team ID or dataroom name");
+        }
+
+        // First check if the folder already exists
+        const existingFoldersResponse = await fetch(
+          `/api/teams/${teamInfo.currentTeam.id}/folders?root=true`,
+        );
+
+        if (existingFoldersResponse.ok) {
+          const existingFolders = await existingFoldersResponse.json();
+          const existingDataroomFolder = existingFolders.find(
+            (folder: any) => folder.name === dataroomName,
+          );
+
+          if (existingDataroomFolder) {
+            // Folder already exists, use it
+            const folderPath = existingDataroomFolder.path.startsWith("/")
+              ? existingDataroomFolder.path.slice(1)
+              : existingDataroomFolder.path;
+            dataroomFolderPathRef.current = folderPath;
+            return folderPath;
+          }
+        }
+
+        // Folder doesn't exist, create it
+        const dataroomFolderResponse = await createFolderInMainDocs({
+          teamId: teamInfo.currentTeam.id,
+          name: dataroomName,
+          path: undefined, // Create at root level
+        });
+
+        const folderPath = dataroomFolderResponse.path.startsWith("/")
+          ? dataroomFolderResponse.path.slice(1)
+          : dataroomFolderResponse.path;
+
+        dataroomFolderPathRef.current = folderPath;
+
+        analytics.capture("Dataroom Folder Created in Main Docs", {
+          folderName: dataroomName,
+          dataroomId,
+        });
+
+        return folderPath;
+      } catch (error) {
+        console.error("Error handling dataroom folder:", error);
+        // Clear the promise ref on error so subsequent attempts can retry
+        dataroomFolderCreationPromiseRef.current = null;
+        // Use dataroom name as fallback path
+        const fallbackPath = dataroomName || "";
+        dataroomFolderPathRef.current = fallbackPath;
+        return fallbackPath;
+      } finally {
+        // Clear the promise ref once creation is complete
+        dataroomFolderCreationPromiseRef.current = null;
+      }
+    })();
+
+    // Store the promise so concurrent callers can await it
+    dataroomFolderCreationPromiseRef.current = creationPromise;
+    return creationPromise;
+  }, [teamInfo, dataroomName, dataroomId, analytics]);
 
   // this var will help to determine the correct api endpoint to request folder creation (If needed).
   const endpointTargetType = dataroomId
@@ -151,18 +230,32 @@ export default function UploadZone({
         } else if (errors.find(({ code }) => code === "file-invalid-type")) {
           const isSupported = SUPPORTED_DOCUMENT_MIME_TYPES.includes(file.type);
           message = `File type not supported ${
-            isFreePlan && !isTrial && isSupported ? `on free plan` : ""
+            isFree && !isTrial && isSupported ? `on free plan` : ""
           }`;
         }
         return { fileName: file.name, message };
       });
       onUploadRejected(rejected);
     },
-    [onUploadRejected, fileSizeLimits, isFreePlan, isTrial],
+    [onUploadRejected, fileSizeLimits, isFree, isTrial],
   );
 
   const onDrop = useCallback(
-    (acceptedFiles: FileWithPaths[]) => {
+    async (acceptedFiles: FileWithPaths[]) => {
+      // Check if team is paused
+      if (isPaused) {
+        toast.error(
+          "Your subscription is paused. Resume your subscription to upload documents.",
+          {
+            action: {
+              label: "Go to Billing",
+              onClick: () => router.push("/settings/billing"),
+            },
+          },
+        );
+        return;
+      }
+
       if (!canAddDocuments && acceptedFiles.length > remainingDocuments) {
         toast.error("You have reached the maximum number of documents.");
         return;
@@ -181,7 +274,7 @@ export default function UploadZone({
             acc.invalid.push({
               fileName: file.name,
               message: `File size too big (max. ${fileSizeLimitMB} MB)${
-                isFreePlan && !isTrial
+                isFree && !isTrial
                   ? ". Upgrade to a paid plan to increase the limit"
                   : ""
               }`,
@@ -211,6 +304,7 @@ export default function UploadZone({
       const newUploads = validatedFiles.valid.map((file) => ({
         fileName: file.name,
         progress: 0,
+        uploadId: crypto.randomUUID(),
       }));
 
       onUploadStart(newUploads);
@@ -226,7 +320,7 @@ export default function UploadZone({
           const buffer = await file.arrayBuffer();
           numPages = await getPagesCount(buffer);
 
-          if (numPages > maxNumPages) {
+          if (numPages > fileSizeLimits.maxPages) {
             setUploads((prev) =>
               prev.filter((upload) => upload.fileName !== file.name),
             );
@@ -234,7 +328,7 @@ export default function UploadZone({
             return setRejectedFiles((prev) => [
               {
                 fileName: file.name,
-                message: `File has too many pages (max. ${maxNumPages})`,
+                message: `File has too many pages (max. ${fileSizeLimits.maxPages})`,
               },
               ...prev,
             ]);
@@ -244,22 +338,29 @@ export default function UploadZone({
         const { complete } = await resumableUpload({
           file, // File
           onProgress: (bytesUploaded, bytesTotal) => {
-            uploadProgress.current[index] = (bytesUploaded / bytesTotal) * 100;
-            onUploadProgress(
-              index,
-              Math.min(Math.round(uploadProgress.current[index]), 99),
+            const progress = Math.min(
+              Math.round((bytesUploaded / bytesTotal) * 100),
+              99,
             );
+            setUploads((prevUploads) => {
+              const updatedUploads = prevUploads.map((upload) =>
+                upload.uploadId === newUploads[index].uploadId
+                  ? { ...upload, progress }
+                  : upload,
+              );
+              const currentUpload = updatedUploads.find(
+                (upload) => upload.uploadId === newUploads[index].uploadId,
+              );
 
-            const _progress = uploadProgress.current.reduce(
-              (acc, progress) => acc + progress,
-              0,
-            );
-
-            setProgress(Math.round(_progress / acceptedFiles.length));
+              onUploadProgress(index, progress, currentUpload?.documentId);
+              return updatedUploads;
+            });
           },
           onError: (error) => {
             setUploads((prev) =>
-              prev.filter((upload) => upload.fileName !== file.name),
+              prev.filter(
+                (upload) => upload.uploadId !== newUploads[index].uploadId,
+              ),
             );
 
             setRejectedFiles((prev) => [
@@ -309,6 +410,7 @@ export default function UploadZone({
         };
 
         const fileUploadPathName = file?.whereToUploadPath;
+        const dataroomUploadPathName = file?.dataroomUploadPath;
 
         const response = await createDocument({
           documentData,
@@ -319,16 +421,17 @@ export default function UploadZone({
 
         // add the new document to the list
         mutate(`/api/teams/${teamInfo?.currentTeam?.id}/documents`);
+
         fileUploadPathName &&
           mutate(
             `/api/teams/${teamInfo?.currentTeam?.id}/folders/documents/${fileUploadPathName}`,
           );
 
         const document = await response.json();
-
+        let dataroomResponse;
         if (dataroomId) {
           try {
-            const response = await fetch(
+            dataroomResponse = await fetch(
               `/api/teams/${teamInfo?.currentTeam?.id}/datarooms/${dataroomId}/documents`,
               {
                 method: "POST",
@@ -337,13 +440,13 @@ export default function UploadZone({
                 },
                 body: JSON.stringify({
                   documentId: document.id,
-                  folderPathName: fileUploadPathName,
+                  folderPathName: dataroomUploadPathName || fileUploadPathName,
                 }),
               },
             );
 
-            if (!response.ok) {
-              const { message } = await response.json();
+            if (!dataroomResponse?.ok) {
+              const { message } = await dataroomResponse.json();
               console.error(
                 "An error occurred while adding document to the dataroom: ",
                 message,
@@ -354,9 +457,9 @@ export default function UploadZone({
             mutate(
               `/api/teams/${teamInfo?.currentTeam?.id}/datarooms/${dataroomId}/documents`,
             );
-            fileUploadPathName &&
+            (dataroomUploadPathName || fileUploadPathName) &&
               mutate(
-                `/api/teams/${teamInfo?.currentTeam?.id}/datarooms/${dataroomId}/folders/documents/${fileUploadPathName}`,
+                `/api/teams/${teamInfo?.currentTeam?.id}/datarooms/${dataroomId}/folders/documents/${dataroomUploadPathName || fileUploadPathName}`,
               );
           } catch (error) {
             console.error(
@@ -367,7 +470,13 @@ export default function UploadZone({
         }
 
         // update progress to 100%
-        onUploadProgress(index, 100, document.id);
+        setUploads((prevUploads) =>
+          prevUploads.map((upload) =>
+            upload.uploadId === newUploads[index].uploadId
+              ? { ...upload, progress: 100, documentId: document.id }
+              : upload,
+          ),
+        );
 
         analytics.capture("Document Added", {
           documentId: document.id,
@@ -384,8 +493,11 @@ export default function UploadZone({
             teamPlan: plan,
           },
         });
+        const dataroomDocumentId = dataroomResponse?.ok
+          ? (await dataroomResponse.json()).id
+          : null;
 
-        return document;
+        return { ...document, dataroomDocumentId: dataroomDocumentId };
       });
 
       const documents = Promise.all(uploadPromises).finally(() => {
@@ -402,14 +514,22 @@ export default function UploadZone({
             `/api/teams/${teamInfo?.currentTeam?.id}/${endpointTargetType}/${folderPathName}`,
           );
       });
+      const uploadedDocuments = await documents;
+      const dataroomDocuments = uploadedDocuments.map((document) => ({
+        documentId: document.id,
+        dataroomDocumentId: document.dataroomDocumentId,
+        fileName: document.name,
+      }));
+      onUploadSuccess?.(dataroomDocuments);
     },
     [
       onUploadStart,
       onUploadProgress,
       endpointTargetType,
       fileSizeLimits,
-      isFreePlan,
+      isFree,
       isTrial,
+      isPaused,
     ],
   );
 
@@ -426,6 +546,7 @@ export default function UploadZone({
       const traverseFolder = async (
         entry: FileSystemEntry,
         parentPathOfThisEntry?: string,
+        dataroomParentPath?: string,
       ): Promise<FileWithPaths[]> => {
         /**
          * Summary of this function:
@@ -435,6 +556,10 @@ export default function UploadZone({
          */
 
         let files: FileWithPaths[] = [];
+
+        if (isSystemFile(entry.name)) {
+          return files;
+        }
 
         if (entry.isDirectory) {
           /**
@@ -466,55 +591,17 @@ export default function UploadZone({
               throw new Error("No team found");
             }
 
-            const response = await fetch(
-              `/api/teams/${teamInfo.currentTeam.id}/${endpointTargetType}`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  name: entry.name, // as folderName
-                  path: parentPathOfThisEntry ?? folderPathName,
-                }),
-              },
-            );
-
-            if (!response.ok) {
-              const { message } = await response.json();
-              setRejectedFiles((prev) => [
-                {
-                  fileName: entry.name,
-                  message: message,
-                },
-                ...prev,
-              ]);
-            } else {
-              let {
-                parentFolderPath: parentFolderPath,
-                path: slugifiedPathNameOfThisEntryAfterFolderCreation,
-              } = await response.json();
-
-              if (
-                slugifiedPathNameOfThisEntryAfterFolderCreation?.startsWith("/")
-              ) {
-                // Reason "/" is removed because our `createDocument` API needs `path` to not start with "/"
-                slugifiedPathNameOfThisEntryAfterFolderCreation =
-                  slugifiedPathNameOfThisEntryAfterFolderCreation.slice(1);
-              }
+            // Create folder in main documents if not in dataroom
+            if (!dataroomId) {
+              // Create folder in main documents only
+              const { path: folderPath } = await createFolderInMainDocs({
+                teamId: teamInfo.currentTeam.id,
+                name: entry.name,
+                path: parentPathOfThisEntry ?? folderPathName,
+              });
 
               analytics.capture("Folder Added", { folderName: entry.name });
-              mutate(
-                `/api/teams/${teamInfo?.currentTeam?.id}/${endpointTargetType}?root=true`,
-              );
-              mutate(
-                `/api/teams/${teamInfo?.currentTeam?.id}/${endpointTargetType}`,
-              );
-              mutate(
-                `/api/teams/${teamInfo?.currentTeam?.id}/${endpointTargetType}${parentFolderPath}`,
-              );
 
-              // Now we are sure that folder is created at the backend and we can continue to traverse its child folders/files.
               const dirReader = (
                 entry as FileSystemDirectoryEntry
               ).createReader();
@@ -522,16 +609,90 @@ export default function UploadZone({
                 (resolve) => dirReader.readEntries(resolve),
               );
 
-              for (const subEntry of subEntries) {
+              const filteredSubEntries = subEntries.filter(
+                (subEntry) => !isSystemFile(subEntry.name),
+              );
+
+              const resolvedFolderPath = folderPath.startsWith("/")
+                ? folderPath.slice(1)
+                : folderPath;
+
+              for (const subEntry of filteredSubEntries) {
                 files.push(
                   ...(await traverseFolder(
                     subEntry,
-                    slugifiedPathNameOfThisEntryAfterFolderCreation,
+                    resolvedFolderPath,
+                    undefined,
+                  )),
+                );
+              }
+            } else {
+              const isFirstLevelFolder =
+                (parentPathOfThisEntry ?? folderPathName) === folderPathName;
+
+              const {
+                parentDataroomPath: targetParentDataroomPath,
+                parentMainDocsPath: targetParentMainDocsPath,
+              } = determineFolderPaths({
+                currentDataroomPath: dataroomParentPath ?? folderPathName,
+                currentMainDocsPath: parentPathOfThisEntry,
+                isFirstLevelFolder,
+              });
+
+              // If replication is disabled, ensure the dataroom folder exists in "All Documents"
+              // Uses promise-lock pattern to prevent race conditions
+              if (!replicateDataroomFolders && dataroomName) {
+                await getOrCreateDataroomFolder();
+              }
+
+              const { dataroomPath, mainDocsPath } = await createFolderInBoth({
+                teamId: teamInfo.currentTeam.id,
+                dataroomId,
+                name: entry.name,
+                parentMainDocsPath: targetParentMainDocsPath,
+                parentDataroomPath: targetParentDataroomPath,
+                setRejectedFiles,
+                analytics,
+                replicateDataroomFolders,
+              });
+
+              const dirReader = (
+                entry as FileSystemDirectoryEntry
+              ).createReader();
+              const subEntries = await new Promise<FileSystemEntry[]>(
+                (resolve) => dirReader.readEntries(resolve),
+              );
+
+              const filteredSubEntries = subEntries.filter(
+                (subEntry) => !isSystemFile(subEntry.name),
+              );
+
+              // Use the resolved paths for all children
+              // Guard against undefined mainDocsPath when replication is disabled
+              const resolvedMainDocsPath = mainDocsPath
+                ? mainDocsPath.startsWith("/")
+                  ? mainDocsPath.slice(1)
+                  : mainDocsPath
+                : undefined;
+              const resolvedDataroomPath = dataroomPath.startsWith("/")
+                ? dataroomPath.slice(1)
+                : dataroomPath;
+
+              for (const subEntry of filteredSubEntries) {
+                files.push(
+                  ...(await traverseFolder(
+                    subEntry,
+                    resolvedMainDocsPath,
+                    resolvedDataroomPath,
                   )),
                 );
               }
             }
           } catch (error) {
+            console.error(
+              "An error occurred while creating the folder: ",
+              error,
+            );
             setRejectedFiles((prev) => [
               {
                 fileName: entry.name,
@@ -541,6 +702,10 @@ export default function UploadZone({
             ]);
           }
         } else if (entry.isFile) {
+          if (isSystemFile(entry.name)) {
+            return files;
+          }
+
           let file = await new Promise<FileWithPaths>((resolve) =>
             (entry as FileSystemFileEntry).file(resolve),
           );
@@ -549,18 +714,28 @@ export default function UploadZone({
           const browserFileTypeCompatibilityIssue = file.type === "";
 
           if (browserFileTypeCompatibilityIssue) {
-            const fileExtension = file.name.split(".").pop();
-            const correctFileType =
-              fileExtension &&
-              Object.keys(acceptableDropZoneFileTypes).find((fileType) =>
-                fileType.endsWith(fileExtension),
-              );
+            const fileExtension = file.name.split(".").pop()?.toLowerCase();
+            let correctMimeType: string | undefined;
+            if (fileExtension) {
+              // Iterate through acceptableDropZoneFileTypes to find the MIME type for the extension
+              for (const [mime, extsUntyped] of Object.entries(
+                acceptableDropZoneFileTypes,
+              )) {
+                const exts = extsUntyped as string[]; // Explicitly type exts
+                if (
+                  exts.some((ext) => ext.toLowerCase() === "." + fileExtension)
+                ) {
+                  correctMimeType = mime;
+                  break;
+                }
+              }
+            }
 
-            if (correctFileType) {
+            if (correctMimeType) {
               // if we can't do like ```file.type = fileType``` because of [Error: Setting getter-only property "type"]
               // The following is the only best way to resolve the problem
               file = new File([file], file.name, {
-                type: correctFileType,
+                type: correctMimeType,
                 lastModified: file.lastModified,
               });
             }
@@ -571,7 +746,18 @@ export default function UploadZone({
             ? entry.fullPath.substring(1)
             : entry.fullPath;
 
-          file.whereToUploadPath = parentPathOfThisEntry ?? folderPathName;
+          // Determine where to upload in "All Documents"
+          if (!replicateDataroomFolders && dataroomId && dataroomName) {
+            // If replication is disabled, ensure the dataroom folder exists and use it
+            // This await is safe because getOrCreateDataroomFolder uses a promise-lock
+            const dataroomFolderPath = await getOrCreateDataroomFolder();
+            file.whereToUploadPath = dataroomFolderPath;
+          } else {
+            // If replication is enabled or not in a dataroom, use the normal folder path
+            file.whereToUploadPath = parentPathOfThisEntry ?? folderPathName;
+          }
+
+          file.dataroomUploadPath = dataroomParentPath;
 
           files.push(file);
         }
@@ -592,7 +778,13 @@ export default function UploadZone({
               (typeof (item as any)?.getAsEntry === "function" &&
                 (item as any).getAsEntry()) ??
               null;
-            return entry ? traverseFolder(entry) : [];
+            return entry
+              ? traverseFolder(
+                  entry,
+                  folderPathName,
+                  dataroomId ? folderPathName : undefined,
+                )
+              : [];
           }),
         );
         fileResults.forEach((fileResult) =>
@@ -608,13 +800,24 @@ export default function UploadZone({
           const file: FileWithPaths = event.target.files[i];
           file.path = file.name;
           file.whereToUploadPath = folderPathName;
+          file.dataroomUploadPath = folderPathName;
           filesToBePassedToOnDrop.push(event.target.files[i]);
         }
       }
 
       return filesToBePassedToOnDrop;
     },
-    [folderPathName, endpointTargetType, teamInfo],
+    [
+      folderPathName,
+      endpointTargetType,
+      teamInfo,
+      dataroomId,
+      dataroomName,
+      analytics,
+      setRejectedFiles,
+      acceptableDropZoneFileTypes,
+      getOrCreateDataroomFolder,
+    ],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -658,9 +861,9 @@ export default function UploadZone({
                   Drop your file(s) here
                 </span>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {isFreePlan && !isTrial
-                    ? `Only *.pdf, *.xls, *.xlsx, *.csv, *.ods, *.png, *.jpeg, *.jpg`
-                    : `Only *.pdf, *.pptx, *.docx, *.xlsx, *.xls, *.csv, *.ods, *.ppt, *.odp, *.doc, *.odt, *.dwg, *.dxf, *.png, *.jpg, *.jpeg, *.mp4, *.mov, *.avi, *.webm, *.ogg`}
+                  {isFree && !isTrial
+                    ? `Only *.pdf, *.xls, *.xlsx, *.csv, *.tsv, *.ods, *.png, *.jpeg, *.jpg`
+                    : `Only *.pdf, *.pptx, *.docx, *.xlsx, *.xls, *.csv, *.tsv, *.ods, *.ppt, *.odp, *.doc, *.odt, *.dwg, *.dxf, *.png, *.jpg, *.jpeg, *.mp4, *.mov, *.avi, *.webm, *.ogg`}
                 </p>
               </div>
             </div>

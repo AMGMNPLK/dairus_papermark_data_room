@@ -6,6 +6,14 @@ import { Download, MoreVerticalIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
+import { timeAgo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { fileIcon } from "@/lib/utils/get-file-icon";
+import {
+  HIERARCHICAL_DISPLAY_STYLE,
+  getHierarchicalDisplayName,
+} from "@/lib/utils/hierarchical-display";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,9 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { fileIcon } from "@/lib/utils/get-file-icon";
-
-import { DocumentVersion } from "../DataroomViewer";
+import { DocumentVersion } from "../viewer/dataroom-viewer";
 
 type DRDocument = {
   dataroomDocumentId: string;
@@ -26,6 +32,7 @@ type DRDocument = {
   downloadOnly: boolean;
   versions: DocumentVersion[];
   canDownload: boolean;
+  hierarchicalIndex: string | null;
 };
 
 type DocumentsCardProps = {
@@ -34,6 +41,8 @@ type DocumentsCardProps = {
   viewId?: string;
   isPreview: boolean;
   allowDownload: boolean;
+  isProcessing?: boolean;
+  dataroomIndexEnabled?: boolean;
 };
 
 export default function DocumentCard({
@@ -42,6 +51,8 @@ export default function DocumentCard({
   viewId,
   isPreview,
   allowDownload,
+  isProcessing = false,
+  dataroomIndexEnabled,
 }: DocumentsCardProps) {
   const { theme, systemTheme } = useTheme();
   const canDownload = document.canDownload && allowDownload;
@@ -49,6 +60,13 @@ export default function DocumentCard({
   const isLight =
     theme === "light" || (theme === "system" && systemTheme === "light");
   const router = useRouter();
+
+  // Get hierarchical display name
+  const displayName = getHierarchicalDisplayName(
+    document.name,
+    document.hierarchicalIndex,
+    dataroomIndexEnabled || false,
+  );
   const { previewToken, domain, slug } = router.query as {
     previewToken?: string;
     domain?: string;
@@ -56,6 +74,14 @@ export default function DocumentCard({
   };
 
   const handleDocumentClick = (e: React.MouseEvent) => {
+    if (isProcessing) {
+      e.preventDefault();
+      toast.error(
+        "Document is still processing. Please wait a moment and try again.",
+      );
+      return;
+    }
+
     e.preventDefault();
     // Open in new tab
     if (domain && slug) {
@@ -75,7 +101,8 @@ export default function DocumentCard({
       toast.error("You cannot download dataroom document in preview mode.");
       return;
     }
-    try {
+
+    const downloadPromise = (async () => {
       const response = await fetch(`/api/links/download/dataroom-document`, {
         method: "POST",
         headers: {
@@ -89,8 +116,9 @@ export default function DocumentCard({
       });
 
       if (!response.ok) {
-        toast.error("Error downloading file");
-        return;
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || "Failed to download file";
+        throw new Error(errorMessage);
       }
 
       // Check if the response is JSON (for direct downloads) or binary (for buffered files)
@@ -109,14 +137,16 @@ export default function DocumentCard({
         link.download = filenameMatch
           ? decodeURIComponent(filenameMatch[1])
           : document.name;
-
+        link.rel = "noopener noreferrer";
         window.document.body.appendChild(link);
         link.click();
-        window.document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
 
-        toast.success("File downloaded successfully");
-        return;
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          window.document.body.removeChild(link);
+        }, 100);
+
+        return "File downloaded successfully";
       }
 
       // For all other files, use the iframe method
@@ -139,73 +169,92 @@ export default function DocumentCard({
           }
         }, 5000);
 
-        toast.success("Download started");
-        return;
+        return "Download started";
       }
 
-      toast.error("Unexpected response format");
-    } catch (error) {
-      console.error("Error downloading file:", error);
-      toast.error("Error downloading file");
-    }
+      throw new Error("Unexpected response format");
+    })();
+
+    toast.promise(downloadPromise, {
+      loading: "Preparing download...",
+      success: (message) => message,
+      error: (err) => err.message || "Failed to download file",
+    });
   };
 
   return (
-    <>
-      <li className="group/row relative flex items-center justify-between rounded-lg border-0 p-3 ring-1 ring-gray-200 transition-all hover:bg-secondary hover:ring-gray-300 dark:bg-secondary dark:ring-gray-700 hover:dark:ring-gray-500 sm:p-4">
-        <div className="z-0 flex min-w-0 shrink items-center space-x-2 sm:space-x-4">
-          <div className="mx-0.5 flex w-8 items-center justify-center text-center sm:mx-1">
-            {fileIcon({
-              fileType: document.versions[0].type ?? "",
-              className: "h-8 w-8",
-              isLight,
-            })}
-          </div>
+    <div
+      className={cn(
+        "group/row relative flex items-center justify-between rounded-lg border-0 p-3 ring-1 ring-gray-200 transition-all hover:bg-secondary hover:ring-gray-300 dark:bg-secondary dark:ring-gray-700 hover:dark:ring-gray-500 sm:p-4",
+        isProcessing && "cursor-not-allowed opacity-60",
+      )}
+    >
+      <div className="z-0 flex min-w-0 shrink items-center space-x-2 sm:space-x-4">
+        <div className="mx-0.5 flex w-8 items-center justify-center text-center sm:mx-1">
+          {fileIcon({
+            fileType: document.versions[0].type ?? "",
+            className: "h-8 w-8",
+            isLight,
+          })}
+        </div>
 
-          <div className="flex-col">
-            <div className="flex items-center">
-              <h2 className="min-w-0 max-w-[300px] truncate text-sm font-semibold leading-6 text-foreground sm:max-w-lg">
-                <button
-                  onClick={handleDocumentClick}
-                  className="w-full truncate"
-                >
-                  <span>{document.name}</span>
-                  <span className="absolute inset-0" />
-                </button>
-              </h2>
-            </div>
+        <div className="flex-col">
+          <div className="flex items-center">
+            <h2
+              className="min-w-0 max-w-[300px] truncate text-sm font-semibold leading-6 text-foreground sm:max-w-lg"
+              style={HIERARCHICAL_DISPLAY_STYLE}
+            >
+              <button
+                onClick={handleDocumentClick}
+                className="cursor-pointer text-left"
+                disabled={isProcessing}
+              >
+                {displayName}
+                {isProcessing && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (Processing...)
+                  </span>
+                )}
+                <span className="absolute inset-0" />
+              </button>
+            </h2>
+          </div>
+          <div className="mt-1 flex items-center space-x-1 text-xs leading-5 text-muted-foreground">
+            <p className="truncate">
+              Updated {timeAgo(document.versions[0].updatedAt)}
+            </p>
           </div>
         </div>
-        {canDownload && (
-          <div className="z-10">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 p-0 text-gray-500 ring-1 ring-gray-100 hover:bg-gray-200 group-hover/row:text-foreground group-hover/row:ring-gray-300"
-                  aria-label="Open menu"
-                >
-                  <MoreVerticalIcon className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    downloadDocument();
-                  }}
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
-      </li>
-    </>
+      </div>
+      {canDownload && !isProcessing && (
+        <div className="z-10">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 p-0 text-gray-500 ring-1 ring-gray-100 hover:bg-gray-200 group-hover/row:text-foreground group-hover/row:ring-gray-300"
+                aria-label="Open menu"
+              >
+                <MoreVerticalIcon className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  downloadDocument();
+                }}
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+    </div>
   );
 }

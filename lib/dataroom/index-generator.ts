@@ -11,13 +11,16 @@ import {
 interface GenerateIndexOptions {
   format?: IndexFileFormat;
   baseUrl?: string;
+  showHierarchicalIndex?: boolean;
 }
 
 interface DataroomDocumentWithVersion {
   id: string;
   folderId: string | null;
   orderIndex: number | null;
+  updatedAt: Date;
   createdAt: Date;
+  hierarchicalIndex: string | null;
   document: {
     id: string;
     name: string;
@@ -47,7 +50,7 @@ export async function generateDataroomIndex(
   link: LinkWithDataroom,
   options: GenerateIndexOptions = {},
 ): Promise<{ data: Buffer; filename: string; mimeType: string }> {
-  const { format = "excel", baseUrl } = options;
+  const { format = "excel", baseUrl, showHierarchicalIndex = false } = options;
 
   // Generate the index data structure
   const indexData: DataroomIndex = {
@@ -73,6 +76,9 @@ export async function generateDataroomIndex(
 
     // Add folder entry
     entries.push({
+      hierarchicalIndex: showHierarchicalIndex
+        ? folder.hierarchicalIndex
+        : undefined,
       name: folder.name,
       type: "Folder",
       path: currentPath.split("/").slice(0, -1).join("/") || "/",
@@ -90,6 +96,9 @@ export async function generateDataroomIndex(
       const latestVersion =
         doc.document.versions[doc.document.versions.length - 1];
       const entry: DataroomIndexEntry = {
+        hierarchicalIndex: showHierarchicalIndex
+          ? doc.hierarchicalIndex
+          : undefined,
         name: doc.document.name,
         type: "File",
         path: `${currentPath}/`,
@@ -99,6 +108,7 @@ export async function generateDataroomIndex(
         size: formatBytes(latestVersion?.fileSize ?? 0),
         onlineUrl: `${baseUrl}/d/${doc.id}`,
         mimeType: latestVersion?.type,
+        version: latestVersion?.versionNumber,
       };
       entries.push(entry);
       indexData.totalFiles++;
@@ -126,6 +136,7 @@ export async function generateDataroomIndex(
 
   // Add root dataroom entry
   indexData.entries.push({
+    hierarchicalIndex: showHierarchicalIndex ? "0" : undefined,
     name: link.dataroom.name,
     type: "Root Folder",
     path: "",
@@ -144,15 +155,22 @@ export async function generateDataroomIndex(
     const latestVersion =
       doc.document.versions[doc.document.versions.length - 1];
     indexData.entries.push({
+      hierarchicalIndex: showHierarchicalIndex
+        ? doc.hierarchicalIndex
+        : undefined,
       name: doc.document.name,
       type: "File",
       path: "/",
-      lastUpdated: latestVersion?.updatedAt || new Date(),
+      lastUpdated:
+        doc.updatedAt > latestVersion?.updatedAt
+          ? doc.updatedAt
+          : latestVersion?.updatedAt || new Date(),
       createdAt: doc.createdAt,
       pages: latestVersion?.numPages ?? 0,
       size: formatBytes(latestVersion?.fileSize ?? 0),
       onlineUrl: `${baseUrl}/d/${doc.id}`,
       mimeType: latestVersion?.type || "unknown",
+      version: latestVersion?.versionNumber,
     });
     indexData.totalFiles++;
     indexData.totalSize += latestVersion?.fileSize ?? 0;
@@ -174,11 +192,15 @@ export async function generateDataroomIndex(
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Dataroom Index");
 
-      // Set column widths and properties
-      worksheet.columns = [
+      // Define columns with their configuration
+      const columns = [
+        ...(showHierarchicalIndex
+          ? [{ header: "Index", key: "hierarchicalIndex", width: 10 }]
+          : []),
         { header: "Name", key: "name", width: 30 },
         { header: "Type", key: "type", width: 10 },
         { header: "Path", key: "path", width: 40 },
+        { header: "Version", key: "version", width: 8 },
         { header: "Pages", key: "pages", width: 8 },
         { header: "Size", key: "size", width: 8 },
         { header: "Online Link", key: "onlineUrl", width: 50 },
@@ -186,6 +208,18 @@ export async function generateDataroomIndex(
         { header: "Added At", key: "createdAt", width: 20 },
         { header: "Last Updated At", key: "lastUpdated", width: 20 },
       ];
+
+      // Set column widths and properties
+      worksheet.columns = columns;
+
+      // Find the index of the onlineUrl column (1-based for ExcelJS)
+      const onlineUrlColumnIndex =
+        columns.findIndex((col) => col.key === "onlineUrl") + 1;
+
+      // Validate that the column was found
+      if (onlineUrlColumnIndex === 0) {
+        throw new Error("onlineUrl column not found in column definitions");
+      }
 
       // Add title rows
       worksheet.spliceRows(
@@ -243,9 +277,11 @@ export async function generateDataroomIndex(
       // Add data rows
       indexData.entries.forEach((entry, index) => {
         const row = worksheet.addRow([
+          ...(showHierarchicalIndex ? [entry.hierarchicalIndex] : []),
           entry.name,
           entry.type,
           entry.path,
+          entry.version,
           entry.pages,
           entry.size,
           entry.onlineUrl,
@@ -265,7 +301,7 @@ export async function generateDataroomIndex(
 
         // Add hyperlink to Online URL
         if (entry.onlineUrl) {
-          const cell = row.getCell(6); // Online URL column
+          const cell = row.getCell(onlineUrlColumnIndex); // dynamically found online link column
           cell.value = {
             text: entry.onlineUrl,
             hyperlink: entry.onlineUrl,
@@ -317,9 +353,11 @@ export async function generateDataroomIndex(
     case "csv": {
       const csvRows = [
         [
+          ...(showHierarchicalIndex ? ["Index"] : []),
           "Name",
           "Type",
           "Path",
+          "Version",
           "Pages",
           "Size",
           "Online Link",
@@ -328,9 +366,11 @@ export async function generateDataroomIndex(
           "Last Updated At",
         ],
         ...indexData.entries.map((entry) => [
+          ...(showHierarchicalIndex ? [entry.hierarchicalIndex] : []),
           entry.name,
           entry.type,
           entry.path,
+          entry.version,
           entry.pages,
           entry.size,
           entry.onlineUrl,

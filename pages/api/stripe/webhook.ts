@@ -1,16 +1,20 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { processPaymentFailure } from "@/ee/features/security";
 import { stripeInstance } from "@/ee/stripe";
 import { checkoutSessionCompleted } from "@/ee/stripe/webhooks/checkout-session-completed";
 import { customerSubscriptionDeleted } from "@/ee/stripe/webhooks/customer-subscription-deleted";
 import { customerSubsciptionUpdated } from "@/ee/stripe/webhooks/customer-subscription-updated";
+import { invoiceUpcoming } from "@/ee/stripe/webhooks/invoice-upcoming";
 import { Readable } from "node:stream";
 import type Stripe from "stripe";
 
 import { log } from "@/lib/utils";
 
 // Stripe requires the raw body to construct the event.
+// add supportsResponseStreaming to enable waitUntil
 export const config = {
+  supportsResponseStreaming: true,
   api: {
     bodyParser: false,
   },
@@ -28,6 +32,8 @@ const relevantEvents = new Set([
   "checkout.session.completed",
   "customer.subscription.updated",
   "customer.subscription.deleted",
+  "payment_intent.payment_failed",
+  "invoice.upcoming",
 ]);
 
 export default async function webhookHandler(
@@ -63,6 +69,12 @@ export default async function webhookHandler(
           break;
         case "customer.subscription.deleted":
           await customerSubscriptionDeleted(event, res);
+          break;
+        case "payment_intent.payment_failed":
+          await processPaymentFailure(event);
+          break;
+        case "invoice.upcoming":
+          await invoiceUpcoming(event, res);
           break;
       }
     } catch (error) {

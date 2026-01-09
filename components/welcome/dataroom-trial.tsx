@@ -9,6 +9,9 @@ import { motion } from "motion/react";
 import { toast } from "sonner";
 import { mutate } from "swr";
 
+import { useAnalytics } from "@/lib/analytics";
+import { STAGGER_CHILD_VARIANTS } from "@/lib/constants";
+
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -20,10 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { useAnalytics } from "@/lib/analytics";
-import { STAGGER_CHILD_VARIANTS } from "@/lib/constants";
-
-import { UpgradePlanModal } from "../billing/upgrade-plan-modal";
+import { UpgradePlanModalWithDiscount } from "../billing/upgrade-plan-modal-with-discount";
 import { Input } from "../ui/input";
 
 export default function DataroomTrial() {
@@ -31,23 +31,45 @@ export default function DataroomTrial() {
   const analytics = useAnalytics();
   const router = useRouter();
 
-  const [industry, setIndustry] = useState<string>("");
+  const [useCase, setUseCase] = useState<string>("");
+  const [customUseCase, setCustomUseCase] = useState<string>("");
   const [companySize, setCompanySize] = useState<string>("");
   const [name, setName] = useState<string>("");
   const [companyName, setCompanyName] = useState<string>("");
-  const [phoneNumber, setPhoneNumber] = useState<E164Number | null>(null);
+  const [tools, setTools] = useState<string>("");
+
   const [loading, setLoading] = useState<boolean>(false);
+
+  // Helper function to convert use case to proper dataroom name
+  const getDataroomName = (useCaseValue: string, customValue: string = "") => {
+    if (useCaseValue === "other" && customValue) {
+      return `${customValue} Data Room`;
+    }
+
+    const useCaseNames: Record<string, string> = {
+      "mergers-and-acquisitions": "Mergers and Acquisitions Data Room",
+      "startup-fundraising": "Startup Fundraising Data Room",
+      "fund-management": "Fund Management & Fundraising Data Room",
+      sales: "Sales Data Room",
+      "project-management": "Project Management Data Room",
+      operations: "Operations Data Room",
+    };
+
+    return useCaseNames[useCaseValue] || "Data Room";
+  };
 
   const handleSubmit = async (event: any) => {
     event.preventDefault();
     event.stopPropagation();
 
-    if (!name || !companyName || !industry || !companySize || !phoneNumber) {
+    if (!name || !companyName || !useCase || !companySize || !tools) {
       toast.error("Please fill out all fields.");
       return;
     }
 
     setLoading(true);
+
+    const dataroomName = getDataroomName(useCase, customUseCase.trim());
 
     try {
       const response = await fetch(
@@ -58,12 +80,12 @@ export default function DataroomTrial() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            name: "Dataroom #1",
+            name: dataroomName,
             fullName: name,
             companyName,
-            industry,
+            useCase: useCase === "other" ? customUseCase.trim() : useCase,
             companySize,
-            phoneNumber,
+            tools,
           }),
         },
       );
@@ -82,8 +104,8 @@ export default function DataroomTrial() {
       }
 
       analytics.capture("Dataroom Trial Created", {
-        dataroomName: "Dataroom #1",
-        industry,
+        dataroomName: dataroomName,
+        useCase: useCase === "other" ? customUseCase.trim() : useCase,
         companySize,
         dataroomId,
       });
@@ -91,8 +113,8 @@ export default function DataroomTrial() {
 
       await mutate(`/api/teams/${teamInfo?.currentTeam?.id}/datarooms`);
 
-      // Instead of redirecting to "/datarooms", we'll navigate to the dataroom-upload page
-      router.push(`/welcome?type=dataroom-upload&dataroomId=${dataroomId}`);
+      // Navigate to dataroom choice page (scratch vs templates)
+      router.push(`/welcome?type=dataroom-choice&dataroomId=${dataroomId}`);
     } catch (error) {
       toast.error("Error adding dataroom. Please try again.");
       console.error("Error creating dataroom:", error);
@@ -127,8 +149,11 @@ export default function DataroomTrial() {
           Papermark
         </p>
         <h1 className="font-display max-w-lg text-3xl font-semibold transition-colors sm:text-4xl">
-          Try data rooms for 7 days!
+          Start a 7-day free trial!
         </h1>
+        {/* <p className="mt-2 text-lg text-muted-foreground">
+          Data Room Plan Trial
+        </p> */}
       </motion.div>
       <motion.div
         variants={STAGGER_CHILD_VARIANTS}
@@ -137,7 +162,7 @@ export default function DataroomTrial() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="name" className="opacity-80">
-              Your Full Name
+              Your Full Name*
             </Label>
             <Input
               id="name"
@@ -151,7 +176,7 @@ export default function DataroomTrial() {
           </div>
           <div className="space-y-1">
             <Label htmlFor="company-name" className="opacity-80">
-              Company Name
+              Company Name*
             </Label>
             <Input
               id="company-name"
@@ -163,7 +188,7 @@ export default function DataroomTrial() {
               onChange={(e) => setCompanyName(e.target.value)}
             />
           </div>
-          <div className="space-y-1">
+          {/* <div className="space-y-1">
             <Label className="opacity-80">Industry</Label>
             <Select onValueChange={(value) => setIndustry(value)}>
               <SelectTrigger>
@@ -192,9 +217,9 @@ export default function DataroomTrial() {
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </div> */}
           <div className="space-y-1">
-            <Label className="opacity-80">Company Size</Label>
+            <Label className="opacity-80">Company Size*</Label>
             <Select onValueChange={(value) => setCompanySize(value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a company size" />
@@ -215,24 +240,82 @@ export default function DataroomTrial() {
             </Select>
           </div>
           <div className="space-y-1">
+            <Label className="opacity-80">Use Case*</Label>
+            <Select
+              onValueChange={(value) => {
+                setUseCase(value);
+                if (value !== "other") {
+                  setCustomUseCase("");
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select your use case" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mergers-and-acquisitions">
+                  Mergers and Acquisitions
+                </SelectItem>
+                <SelectItem value="startup-fundraising">
+                  Startup Fundraising
+                </SelectItem>
+                <SelectItem value="fund-management">
+                  Fund management & Fundraising
+                </SelectItem>
+                <SelectItem value="sales">Sales</SelectItem>
+                <SelectItem value="project-management">
+                  Project management
+                </SelectItem>
+                <SelectItem value="operations">Operations</SelectItem>
+
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            {useCase === "other" && (
+              <input
+                type="text"
+                className="mt-2 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                placeholder="Please specify your use case"
+                value={customUseCase}
+                onChange={(e) => setCustomUseCase(e.target.value)}
+              />
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="tools" className="opacity-80">
+              Tools*
+            </Label>
+            <Input
+              id="tools"
+              type="text"
+              autoComplete="off"
+              data-1p-ignore
+              placeholder="Current software you are using for data rooms"
+              className="mb-4 mt-1 w-full"
+              onChange={(e) => setTools(e.target.value)}
+            />
+          </div>
+          {/* <div className="space-y-1">
             <Label className="opacity-80">Phone Number</Label>
             <PhoneInput
               placeholder="+1 123 456 7890"
               onChange={(value) => setPhoneNumber(value)}
               defaultCountry="US"
             />
-          </div>
+          </div> */}
 
           <div className="space-y-4 text-center">
             <Button
               type="submit"
               className="h-9 w-full"
               disabled={
-                !phoneNumber ||
+                !tools ||
                 !companySize ||
-                !industry ||
+                !useCase ||
                 !name ||
-                !companyName
+                !companyName ||
+                (useCase === "other" && !customUseCase.trim())
               }
               loading={loading}
             >
@@ -241,16 +324,18 @@ export default function DataroomTrial() {
 
             <div className="text-xs text-muted-foreground">
               {/* Data rooms are available on our{" "}
-              <UpgradePlanModal clickedPlan={PlanEnum.Business}>
+              <UpgradePlanModalWithDiscount clickedPlan={PlanEnum.Business}>
                 <button className="underline">Business</button>
-              </UpgradePlanModal>{" "}
+              </UpgradePlanModalWithDiscount>{" "}
               plan. <br /> */}
               No credit card is required. After the trial, upgrade to{" "}
-              <UpgradePlanModal clickedPlan={PlanEnum.Business}>
-                <button className="underline">
-                  Papermark Business or Data Rooms
-                </button>
-              </UpgradePlanModal>{" "}
+              <UpgradePlanModalWithDiscount
+                clickedPlan={PlanEnum.Business}
+                highlightItem={["datarooms"]}
+                trigger="dataroom_trial_form"
+              >
+                <button className="underline">Papermark Data Rooms</button>
+              </UpgradePlanModalWithDiscount>{" "}
               to continue using data rooms.
             </div>
           </div>

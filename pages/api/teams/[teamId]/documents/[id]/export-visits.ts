@@ -4,16 +4,65 @@ import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { getServerSession } from "next-auth/next";
 
 import prisma from "@/lib/prisma";
-import { getViewPageDuration, getViewUserAgent } from "@/lib/tinybird";
+import { jobStore } from "@/lib/redis-job-store";
+import { exportVisitsTask } from "@/lib/trigger/export-visits";
 import { CustomUser } from "@/lib/types";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
-  if (req.method !== "GET") {
-    // GET /api/teams/:teamId/documents/:id/export-visits
-    res.setHeader("Allow", ["GET"]);
+  if (req.method === "GET") {
+    const session = await getServerSession(req, res, authOptions);
+    if (!session) {
+      return res.status(401).end("Unauthorized");
+    }
+
+    const { teamId, id: docId } = req.query as {
+      teamId: string;
+      id: string;
+    };
+    const userId = (session.user as CustomUser).id;
+
+    try {
+      // Verify team access
+      const team = await prisma.team.findUnique({
+        where: {
+          id: teamId,
+          users: {
+            some: {
+              userId: userId,
+            },
+          },
+        },
+        select: { plan: true },
+      });
+
+      if (!team) {
+        return res.status(404).end("Team not found");
+      }
+
+      // Get existing exports for this document
+      const existingExports = await jobStore.getResourceJobs(
+        docId,
+        teamId,
+        "document",
+        undefined,
+        10,
+      );
+
+      return res.status(200).json(existingExports);
+    } catch (error) {
+      console.error("Error fetching existing exports:", error);
+      return res
+        .status(500)
+        .json({ message: "Failed to fetch existing exports" });
+    }
+  }
+
+  if (req.method !== "POST") {
+    // Changed to POST to trigger background job
+    res.setHeader("Allow", ["POST"]);
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
@@ -57,15 +106,6 @@ export default async function handler(
       select: {
         id: true,
         name: true,
-        numPages: true,
-        versions: {
-          orderBy: { createdAt: "desc" },
-          select: {
-            versionNumber: true,
-            createdAt: true,
-            numPages: true,
-          },
-        },
       },
     });
 
@@ -73,144 +113,44 @@ export default async function handler(
       return res.status(404).end("Document not found");
     }
 
-    // Fetch views data from the database
-    const views = await prisma.view.findMany({
-      where: { documentId: docId },
-      include: {
-        link: { select: { name: true } },
-        agreementResponse: {
-          include: {
-            agreement: {
-              select: {
-                name: true,
-                content: true,
-              },
-            },
-          },
-        },
-        customFieldResponse: {
-          select: {
-            data: true,
-          },
-        },
-      },
-      orderBy: {
-        viewedAt: "desc",
-      },
+    // Create export job record
+    const exportJob = await jobStore.createJob({
+      type: "document",
+      resourceId: docId,
+      resourceName: document.name,
+      userId,
+      teamId,
+      status: "PENDING",
     });
 
-    if (!views || views.length === 0) {
-      return res.status(404).end("Document has no views");
-    }
-
-    const isProPlan = team.plan.includes("pro");
-
-    // Create CSV rows array starting with headers
-    const csvRows: string[] = [];
-    const headers = [
-      "Viewed at",
-      "Name",
-      "Email",
-      "Link Name",
-      "Total Visit Duration (s)",
-      "Total Document Completion (%)",
-      "Document version",
-      "Downloaded at",
-      "Verified",
-      "Agreement Accepted",
-      "Agreement Name",
-      "Agreement Content",
-      "Agreement Accepted At",
-      "Viewed from dataroom",
-      "Browser",
-      "OS",
-      "Device",
-    ];
-
-    if (!isProPlan) {
-      headers.push("Country", "City", "Custom Fields");
-    }
-
-    csvRows.push(headers.join(","));
-
-    // Fetch all durations in parallel
-    const durations = await Promise.all(
-      views.map((view) =>
-        getViewPageDuration({
-          documentId: docId,
-          viewId: view.id,
-          since: 0,
-        }),
-      ),
+    // Trigger the background task
+    const handle = await exportVisitsTask.trigger(
+      {
+        type: "document",
+        teamId,
+        resourceId: docId,
+        userId,
+        exportId: exportJob.id,
+      },
+      {
+        idempotencyKey: exportJob.id,
+        tags: [`team_${teamId}`, `user_${userId}`, `export_${exportJob.id}`],
+      },
     );
 
-    const userAgentData = await Promise.all(
-      views.map((view) =>
-        getViewUserAgent({
-          documentId: docId,
-          viewId: view.id,
-          since: 0,
-        }),
-      ),
-    );
-    // Process each view and add to CSV rows
-    views.forEach((view, index) => {
-      const relevantDocumentVersion = document.versions.find(
-        (version) => version.createdAt <= view.viewedAt,
-      );
-
-      const numPages =
-        relevantDocumentVersion?.numPages || document.numPages || 0;
-      const completionRate = numPages
-        ? (durations[index].data.length / numPages) * 100
-        : 0;
-
-      const totalDuration = durations[index].data.reduce(
-        (total, data) => total + data.sum_duration,
-        0,
-      );
-
-      const rowData = [
-        view.viewedAt.toISOString(),
-        view.viewerName || "NaN",
-        view.viewerEmail || "NaN",
-        view.link?.name || "NaN",
-        (totalDuration / 1000.0).toFixed(1),
-        completionRate.toFixed(2) + "%",
-        relevantDocumentVersion?.versionNumber ||
-          document.versions[0]?.versionNumber ||
-          "NaN",
-        view.downloadedAt ? view.downloadedAt.toISOString() : "NaN",
-        view.verified ? "Yes" : "No",
-        view.agreementResponse ? "Yes" : "NaN",
-        view.agreementResponse?.agreement.name || "NaN",
-        view.agreementResponse?.agreement.content || "NaN",
-        view.agreementResponse?.createdAt.toISOString() || "NaN",
-        view.dataroomId ? "Yes" : "No",
-        userAgentData[index]?.data[0]?.browser || "NaN",
-        userAgentData[index]?.data[0]?.os || "NaN",
-        userAgentData[index]?.data[0]?.device || "NaN",
-      ];
-
-      if (!isProPlan) {
-        rowData.push(
-          userAgentData[index]?.data[0]?.country || "NaN",
-          userAgentData[index]?.data[0]?.city || "NaN",
-          view.customFieldResponse?.data
-            ? `"${JSON.stringify(view.customFieldResponse.data).replace(/"/g, '""')}"`
-            : "NaN",
-        );
-      }
-
-      csvRows.push(rowData.join(","));
+    // Update the job with the trigger run ID for cancellation
+    const updatedJob = await jobStore.updateJob(exportJob.id, {
+      triggerRunId: handle.id,
     });
 
     return res.status(200).json({
-      documentName: document.name,
-      visits: csvRows.join("\n"),
+      exportId: updatedJob?.id || exportJob.id,
+      status: updatedJob?.status || exportJob.status,
+      message:
+        "Export job created successfully. You will be notified when it's ready.",
     });
   } catch (error) {
-    console.error(error);
+    console.error("Error creating export job:", error);
     return res.status(500).json({ message: "Something went wrong" });
   }
 }

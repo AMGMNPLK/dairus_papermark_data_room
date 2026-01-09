@@ -6,7 +6,6 @@ const nextConfig = {
     minimumCacheTTL: 2592000, // 30 days
     remotePatterns: prepareRemotePatterns(),
   },
-  transpilePackages: ["react-syntax-highlighter"],
   skipTrailingSlashRedirect: true,
   assetPrefix:
     process.env.NODE_ENV === "production" &&
@@ -17,17 +16,23 @@ const nextConfig = {
     return [
       {
         source: "/",
-        destination: "/documents",
+        destination: "/dashboard",
         permanent: false,
+        ...(process.env.NEXT_PUBLIC_APP_BASE_HOST
+          ? {
+              has: [
+                {
+                  type: "host",
+                  value: process.env.NEXT_PUBLIC_APP_BASE_HOST,
+                },
+              ],
+            }
+          : {}),
       },
       {
-        source: "/view/cm2xiaxzo000d147xszm9q72o",
-        destination: "/view/cm34cqqqx000212oekj9upn8o",
-        permanent: false,
-      },
-      {
-        source: "/view/cm5morpmg000btdwrlahi7f2y",
-        destination: "/view/cm68iygxd0005wuf5svbr6c1x",
+        // temporary redirect set on 2025-10-22
+        source: "/view/cmdn06aw00001ju04jgsf8h4f",
+        destination: "/view/cmh0uiv6t001mjm04sk10ecc8",
         permanent: false,
       },
       {
@@ -113,12 +118,16 @@ const nextConfig = {
       },
       {
         source: "/services/:path*",
-        has: [
-          {
-            type: "host",
-            value: process.env.NEXT_PUBLIC_WEBHOOK_BASE_HOST,
-          },
-        ],
+        ...(process.env.NEXT_PUBLIC_WEBHOOK_BASE_HOST
+          ? {
+              has: [
+                {
+                  type: "host",
+                  value: process.env.NEXT_PUBLIC_WEBHOOK_BASE_HOST,
+                },
+              ],
+            }
+          : {}),
         headers: [
           {
             key: "X-Robots-Tag",
@@ -175,8 +184,11 @@ function prepareRemotePatterns() {
     { protocol: "https", hostname: "faisalman.github.io" },
     // special document pages
     { protocol: "https", hostname: "d36r2enbzam0iu.cloudfront.net" },
+    // us special storage
+    { protocol: "https", hostname: "d35vw2hoyyl88.cloudfront.net" },
   ];
 
+  // Default region patterns
   if (process.env.NEXT_PRIVATE_UPLOAD_DISTRIBUTION_HOST) {
     patterns.push({
       protocol: "https",
@@ -188,6 +200,21 @@ function prepareRemotePatterns() {
     patterns.push({
       protocol: "https",
       hostname: process.env.NEXT_PRIVATE_ADVANCED_UPLOAD_DISTRIBUTION_HOST,
+    });
+  }
+
+  // US region patterns
+  if (process.env.NEXT_PRIVATE_UPLOAD_DISTRIBUTION_HOST_US) {
+    patterns.push({
+      protocol: "https",
+      hostname: process.env.NEXT_PRIVATE_UPLOAD_DISTRIBUTION_HOST_US,
+    });
+  }
+
+  if (process.env.NEXT_PRIVATE_ADVANCED_UPLOAD_DISTRIBUTION_HOST_US) {
+    patterns.push({
+      protocol: "https",
+      hostname: process.env.NEXT_PRIVATE_ADVANCED_UPLOAD_DISTRIBUTION_HOST_US,
     });
   }
 

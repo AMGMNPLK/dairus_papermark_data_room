@@ -1,17 +1,30 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
-import { LinkAudienceType } from "@prisma/client";
+import { isTeamPausedById } from "@/ee/features/billing/cancellation/lib/is-team-paused";
+import { LinkAudienceType, Tag } from "@prisma/client";
+import { waitUntil } from "@vercel/functions";
 import { getServerSession } from "next-auth/next";
 
 import { errorhandler } from "@/lib/errorHandler";
 import prisma from "@/lib/prisma";
-import { CustomUser } from "@/lib/types";
+import { CustomUser, WatermarkConfigSchema } from "@/lib/types";
 import {
   decryptEncrpytedPassword,
   generateEncrpytedPassword,
 } from "@/lib/utils";
+import { sendLinkCreatedWebhook } from "@/lib/webhook/triggers/link-created";
 
 import { authOptions } from "../auth/[...nextauth]";
+
+export const config = {
+  // in order to enable `waitUntil` function
+  supportsResponseStreaming: true,
+};
+
+export interface DomainObject {
+  id: string;
+  slug: string;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -30,6 +43,7 @@ export default async function handler(
       password,
       expiresAt,
       teamId,
+      enableIndexFile,
       ...linkDomainData
     } = req.body;
 
@@ -39,17 +53,27 @@ export default async function handler(
     const documentLink = linkType === "DOCUMENT_LINK";
 
     try {
-      const team = await prisma.team.findUnique({
+      const teamAccess = await prisma.userTeam.findUnique({
         where: {
-          id: teamId,
-          users: {
-            some: { userId },
+          userId_teamId: {
+            userId,
+            teamId,
           },
         },
+        select: { teamId: true },
       });
 
-      if (!team) {
-        return res.status(400).json({ error: "Team not found." });
+      if (!teamAccess) {
+        return res.status(401).json({ error: "Unauthorized." });
+      }
+
+      // Check if team is paused
+      const teamIsPaused = await isTeamPausedById(teamId);
+      if (teamIsPaused) {
+        return res.status(403).json({
+          error:
+            "Team is currently paused. New link creation is not available.",
+        });
       }
 
       const hashedPassword =
@@ -66,7 +90,7 @@ export default async function handler(
         slug = null;
       }
 
-      let domainObj;
+      let domainObj: DomainObject | null;
 
       if (domain && slug) {
         domainObj = await prisma.domain.findUnique({
@@ -110,82 +134,140 @@ export default async function handler(
         });
       }
 
+      if (linkData.enableWatermark) {
+        if (!linkData.watermarkConfig) {
+          return res.status(400).json({
+            error:
+              "Watermark configuration is required when watermark is enabled.",
+          });
+        }
+
+        // Validate the watermark config structure
+        const validation = WatermarkConfigSchema.safeParse(
+          linkData.watermarkConfig,
+        );
+        if (!validation.success) {
+          return res.status(400).json({
+            error: "Invalid watermark configuration.",
+            details: validation.error.issues
+              .map((issue) => issue.message)
+              .join(", "),
+          });
+        }
+      }
+
       // Fetch the link and its related document from the database
-      const link = await prisma.link.create({
-        data: {
-          documentId: documentLink ? targetId : null,
-          dataroomId: dataroomLink ? targetId : null,
-          linkType,
-          teamId,
-          password: hashedPassword,
-          name: linkData.name || null,
-          emailProtected:
-            linkData.audienceType === LinkAudienceType.GROUP
-              ? true
-              : linkData.emailProtected,
-          emailAuthenticated: linkData.emailAuthenticated,
-          expiresAt: exat,
-          allowDownload: linkData.allowDownload,
-          domainId: domainObj?.id || null,
-          domainSlug: domain || null,
-          slug: slug || null,
-          enableNotification: linkData.enableNotification,
-          enableFeedback: linkData.enableFeedback,
-          enableScreenshotProtection: linkData.enableScreenshotProtection,
-          enableCustomMetatag: linkData.enableCustomMetatag,
-          metaTitle: linkData.metaTitle || null,
-          metaDescription: linkData.metaDescription || null,
-          metaImage: linkData.metaImage || null,
-          metaFavicon: linkData.metaFavicon || null,
-          allowList: linkData.allowList,
-          denyList: linkData.denyList,
-          audienceType: linkData.audienceType,
-          groupId:
-            linkData.audienceType === LinkAudienceType.GROUP
-              ? linkData.groupId
-              : null,
-          ...(linkData.enableQuestion && {
-            enableQuestion: linkData.enableQuestion,
-            feedback: {
-              create: {
-                data: {
-                  question: linkData.questionText,
-                  type: linkData.questionType,
+      const updatedLink = await prisma.$transaction(async (tx) => {
+        const link = await tx.link.create({
+          data: {
+            documentId: documentLink ? targetId : null,
+            dataroomId: dataroomLink ? targetId : null,
+            linkType,
+            teamId,
+            password: hashedPassword,
+            name: linkData.name || null,
+            emailProtected:
+              linkData.audienceType === LinkAudienceType.GROUP
+                ? true
+                : linkData.emailProtected,
+            emailAuthenticated: linkData.emailAuthenticated,
+            expiresAt: exat,
+            allowDownload: linkData.allowDownload,
+            domainId: domainObj?.id || null,
+            domainSlug: domain || null,
+            slug: slug || null,
+            enableIndexFile: enableIndexFile,
+            enableNotification: linkData.enableNotification,
+            enableFeedback: linkData.enableFeedback,
+            enableScreenshotProtection: linkData.enableScreenshotProtection,
+            enableCustomMetatag: linkData.enableCustomMetatag,
+            metaTitle: linkData.metaTitle || null,
+            metaDescription: linkData.metaDescription || null,
+            metaImage: linkData.metaImage || null,
+            metaFavicon: linkData.metaFavicon || null,
+            welcomeMessage: linkData.welcomeMessage || null,
+            allowList: linkData.allowList,
+            denyList: linkData.denyList,
+            audienceType: linkData.audienceType,
+            groupId:
+              linkData.audienceType === LinkAudienceType.GROUP
+                ? linkData.groupId
+                : null,
+            ...(linkData.enableQuestion && {
+              enableQuestion: linkData.enableQuestion,
+              feedback: {
+                create: {
+                  data: {
+                    question: linkData.questionText,
+                    type: linkData.questionType,
+                  },
                 },
               },
-            },
-          }),
-          ...(linkData.enableAgreement && {
-            enableAgreement: linkData.enableAgreement,
-            agreementId: linkData.agreementId,
-          }),
-          ...(linkData.enableWatermark && {
-            enableWatermark: linkData.enableWatermark,
-            watermarkConfig: linkData.watermarkConfig,
-          }),
-          showBanner: linkData.showBanner,
-          ...(linkData.customFields && {
-            customFields: {
-              createMany: {
-                data: linkData.customFields.map(
-                  (field: any, index: number) => ({
-                    type: field.type,
-                    identifier: field.identifier,
-                    label: field.label,
-                    placeholder: field.placeholder,
-                    required: field.required,
-                    disabled: field.disabled,
-                    orderIndex: index,
-                  }),
-                ),
+            }),
+            ...(linkData.enableAgreement && {
+              enableAgreement: linkData.enableAgreement,
+              agreementId: linkData.agreementId,
+            }),
+            ...(linkData.enableWatermark && {
+              enableWatermark: linkData.enableWatermark,
+              watermarkConfig: linkData.watermarkConfig,
+            }),
+            ...(linkData.enableUpload && {
+              enableUpload: linkData.enableUpload,
+              isFileRequestOnly: linkData.isFileRequestOnly,
+              uploadFolderId: linkData.uploadFolderId,
+            }),
+            enableAIAgents: linkData.enableAIAgents || false,
+            enableConversation: linkData.enableConversation || false,
+            showBanner: linkData.showBanner,
+            ...(linkData.customFields && {
+              customFields: {
+                createMany: {
+                  data: linkData.customFields.map(
+                    (field: any, index: number) => ({
+                      type: field.type,
+                      identifier: field.identifier,
+                      label: field.label,
+                      placeholder: field.placeholder,
+                      required: field.required,
+                      disabled: field.disabled,
+                      orderIndex: index,
+                    }),
+                  ),
+                },
               },
-            },
-          }),
-        },
+            }),
+          },
+          include: {
+            customFields: true,
+          },
+        });
+
+        let tags: Partial<Tag>[] = [];
+        if (linkData.tags?.length) {
+          // create tag items
+          await tx.tagItem.createMany({
+            data: linkData.tags.map((tagId: string) => ({
+              tagId,
+              itemType: "LINK_TAG",
+              linkId: link.id,
+              taggedBy: userId,
+            })),
+            skipDuplicates: true,
+          });
+
+          // return tags
+          tags = await tx.tag.findMany({
+            where: { id: { in: linkData.tags } },
+            select: { id: true, name: true, color: true, description: true },
+          });
+        }
+
+        return { ...link, tags };
       });
 
       const linkWithView = {
-        ...link,
+        ...updatedLink,
         _count: { views: 0 },
         views: [],
       };
@@ -193,6 +275,17 @@ export default async function handler(
       if (!linkWithView) {
         return res.status(404).json({ error: "Link not found" });
       }
+
+      waitUntil(
+        sendLinkCreatedWebhook({
+          teamId,
+          data: {
+            link_id: linkWithView.id,
+            document_id: linkWithView.documentId,
+            dataroom_id: linkWithView.dataroomId,
+          },
+        }),
+      );
 
       // Decrypt the password for the new link
       if (linkWithView.password !== null) {

@@ -11,16 +11,18 @@ export function useTeams() {
   const { data: session } = useSession();
 
   const { data: teams, isValidating } = useSWR<Team[]>(
-    router.isReady && session && "/api/teams",
+    router.isReady && session ? "/api/teams" : null,
     fetcher,
     {
       dedupingInterval: 20000,
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
     },
   );
 
   return {
     teams,
-    loading: teams ? false : true,
+    loading: !teams && router.isReady && !!session,
     isValidating,
   };
 }

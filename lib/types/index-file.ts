@@ -1,4 +1,5 @@
 export interface DataroomIndexEntry {
+  hierarchicalIndex: string | null | undefined;
   name: string;
   type: "File" | "Folder" | "Root Folder";
   path: string;
@@ -8,6 +9,7 @@ export interface DataroomIndexEntry {
   onlineUrl?: string;
   mimeType?: string;
   createdAt?: Date;
+  version?: number;
 }
 
 export interface DataroomIndex {

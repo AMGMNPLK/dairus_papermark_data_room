@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 
-import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ interface CustomFieldProps {
   isLast?: boolean;
 }
 
-export default function CustomField({
+export default memo(function CustomField({
   field,
   onUpdate,
   onDelete,
@@ -39,7 +39,7 @@ export default function CustomField({
 
   useEffect(() => {
     onUpdate(localField);
-  }, [localField, onUpdate]);
+  }, [localField]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -100,8 +100,9 @@ export default function CustomField({
               <SelectItem value="SHORT_TEXT">Short Text</SelectItem>
               <SelectItem value="LONG_TEXT">Long Text</SelectItem>
               <SelectItem value="NUMBER">Number</SelectItem>
-              {/* <SelectItem value="PHONE_NUMBER">Phone</SelectItem> */}
+              <SelectItem value="PHONE_NUMBER">Phone</SelectItem>
               <SelectItem value="URL">URL</SelectItem>
+              <SelectItem value="CHECKBOX">Checkbox</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -138,16 +139,18 @@ export default function CustomField({
           />
         </div> */}
 
-        <div className="grid gap-2">
-          <Label htmlFor="placeholder">Placeholder</Label>
-          <Input
-            id="placeholder"
-            type="text"
-            value={localField.placeholder || ""}
-            onChange={(e) => handleInputChange(e, "placeholder")}
-            placeholder="e.g., Enter your company name"
-          />
-        </div>
+        {localField.type !== "CHECKBOX" && (
+          <div className="grid gap-2">
+            <Label htmlFor="placeholder">Placeholder</Label>
+            <Input
+              id="placeholder"
+              type="text"
+              value={localField.placeholder || ""}
+              onChange={(e) => handleInputChange(e, "placeholder")}
+              placeholder="e.g., Enter your company name"
+            />
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <div className="flex flex-col space-y-1">
@@ -166,4 +169,4 @@ export default function CustomField({
       </div>
     </div>
   );
-}
+});

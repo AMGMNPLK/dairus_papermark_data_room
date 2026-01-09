@@ -1,11 +1,18 @@
 import dynamic from "next/dynamic";
 
-import { Brand, Document, DocumentVersion } from "@prisma/client";
+import { ViewerChatPanel } from "@/ee/features/ai/components/viewer-chat-panel";
+import {
+  ViewerChatLayout,
+  ViewerChatProvider,
+} from "@/ee/features/ai/components/viewer-chat-provider";
+import { ViewerChatToggle } from "@/ee/features/ai/components/viewer-chat-toggle";
+import {
+  Brand,
+  DataroomBrand,
+  Document,
+  DocumentVersion,
+} from "@prisma/client";
 import { ExtendedRecordMap } from "notion-types";
-
-import { NotionPage } from "@/components/NotionPage";
-import PDFViewer from "@/components/view/PDFViewer";
-import { DEFAULT_DOCUMENT_VIEW_TYPE } from "@/components/view/document-view";
 
 import {
   LinkWithDataroomDocument,
@@ -13,7 +20,15 @@ import {
   NotionTheme,
   WatermarkConfig,
 } from "@/lib/types";
+import { useMediaQuery } from "@/lib/utils/use-media-query";
 
+import { DEFAULT_DOCUMENT_VIEW_TYPE } from "@/components/view/document-view";
+import { NotionPage } from "@/components/view/viewer/notion-page";
+import PDFViewer from "@/components/view/viewer/pdf-default-viewer";
+
+import { DEFAULT_DATAROOM_DOCUMENT_VIEW_TYPE } from "./dataroom/dataroom-document-view";
+import LinkPreview from "./link-preview";
+import { TNavData } from "./nav";
 import AdvancedExcelViewer from "./viewer/advanced-excel-viewer";
 import DownloadOnlyViewer from "./viewer/download-only-viewer";
 import ImageViewer from "./viewer/image-viewer";
@@ -30,6 +45,14 @@ export type TViewDocumentData = Document & {
   versions: DocumentVersion[];
 };
 
+const isDownloadAllowed = (
+  canDownload: boolean | undefined,
+  linkAllowDownload: boolean | undefined,
+): boolean => {
+  if (canDownload === false) return false;
+  return !!linkAllowDownload;
+};
+
 export default function ViewData({
   viewData,
   link,
@@ -41,8 +64,10 @@ export default function ViewData({
   useAdvancedExcelViewer,
   viewerEmail,
   dataroomId,
+  canDownload,
+  annotationsEnabled,
 }: {
-  viewData: DEFAULT_DOCUMENT_VIEW_TYPE;
+  viewData: DEFAULT_DOCUMENT_VIEW_TYPE | DEFAULT_DATAROOM_DOCUMENT_VIEW_TYPE;
   link: LinkWithDocument | LinkWithDataroomDocument;
   document: TViewDocumentData;
   notionData?: {
@@ -50,168 +75,170 @@ export default function ViewData({
     recordMap: ExtendedRecordMap | null;
     theme: NotionTheme | null;
   };
-  brand?: Partial<Brand> | null;
+  brand?: Partial<Brand> | Partial<DataroomBrand> | null;
   showPoweredByBanner?: boolean;
   showAccountCreationSlide?: boolean;
   useAdvancedExcelViewer?: boolean;
   viewerEmail?: string;
   dataroomId?: string;
+  canDownload?: boolean;
+  annotationsEnabled?: boolean;
 }) {
-  return notionData?.recordMap ? (
-    <NotionPage
-      recordMap={notionData.recordMap}
-      // rootPageId={notionData.rootNotionPageId}
-      viewId={viewData.viewId}
-      isPreview={viewData.isPreview}
-      linkId={link.id}
-      documentId={document.id}
-      versionNumber={document.versions[0].versionNumber}
-      brand={brand}
-      theme={notionData.theme}
-      screenshotProtectionEnabled={link.enableScreenshotProtection!}
-      dataroomId={dataroomId}
-    />
-  ) : document.downloadOnly ? (
-    <DownloadOnlyViewer
-      file={viewData.file!}
-      linkId={link.id}
-      viewId={viewData.viewId}
-      documentId={document.id}
-      allowDownload={true}
-      versionNumber={document.versions[0].versionNumber}
-      brand={brand}
-      documentName={document.name}
-      isPreview={viewData.isPreview}
-      dataroomId={dataroomId}
-    />
-  ) : viewData.fileType === "sheet" && viewData.sheetData ? (
-    <ExcelViewer
-      linkId={link.id}
-      viewId={viewData.viewId}
-      isPreview={viewData.isPreview}
-      documentId={document.id}
-      documentName={document.name}
-      versionNumber={document.versions[0].versionNumber}
-      sheetData={viewData.sheetData}
-      brand={brand}
-      allowDownload={link.allowDownload!}
-      screenshotProtectionEnabled={link.enableScreenshotProtection!}
-      dataroomId={dataroomId}
-    />
-  ) : viewData.fileType === "sheet" && useAdvancedExcelViewer ? (
-    <AdvancedExcelViewer
-      linkId={link.id}
-      viewId={viewData.viewId}
-      isPreview={viewData.isPreview}
+  const { isMobile } = useMediaQuery();
+
+  const navData: TNavData = {
+    viewId: viewData.viewId,
+    isPreview: viewData.isPreview,
+    linkId: link.id,
+    brand: brand,
+    viewerId: "viewerId" in viewData ? viewData.viewerId : undefined,
+    isMobile: isMobile,
+    isDataroom: !!dataroomId,
+    documentId: document.id,
+    dataroomId: dataroomId,
+    conversationsEnabled:
+      !!dataroomId &&
+      ("conversationsEnabled" in viewData
+        ? viewData.conversationsEnabled
+        : false),
+    allowDownload:
+      document.downloadOnly ||
+      isDownloadAllowed(canDownload, link.allowDownload ?? false),
+    isTeamMember: viewData.isTeamMember,
+    annotationsFeatureEnabled: annotationsEnabled,
+  };
+
+  // Check if agents are enabled (returned from views API after access is granted)
+  const agentsEnabled =
+    "agentsEnabled" in viewData ? viewData.agentsEnabled : false;
+
+  // Determine dataroom name if applicable
+  const dataroomName =
+    dataroomId && "dataroomName" in viewData
+      ? viewData.dataroomName
+      : undefined;
+
+  return (
+    <ViewerChatProvider
+      enabled={agentsEnabled}
       documentId={document.id}
       documentName={document.name}
-      versionNumber={document.versions[0].versionNumber}
-      file={viewData.file!}
-      allowDownload={link.allowDownload!}
-      brand={brand}
       dataroomId={dataroomId}
-    />
-  ) : viewData.fileType === "image" ? (
-    <ImageViewer
-      file={viewData.file!}
-      linkId={link.id}
-      documentId={document.id}
-      viewId={viewData.viewId}
-      assistantEnabled={document.assistantEnabled}
-      allowDownload={link.allowDownload!}
-      feedbackEnabled={link.enableFeedback!}
-      screenshotProtectionEnabled={link.enableScreenshotProtection!}
-      versionNumber={document.versions[0].versionNumber}
-      brand={brand}
-      showPoweredByBanner={showPoweredByBanner}
-      showAccountCreationSlide={showAccountCreationSlide}
-      enableQuestion={link.enableQuestion}
-      feedback={link.feedback}
-      viewerEmail={viewerEmail}
-      watermarkConfig={
-        link.enableWatermark ? (link.watermarkConfig as WatermarkConfig) : null
-      }
-      ipAddress={viewData.ipAddress}
-      linkName={link.name ?? `Link #${link.id.slice(-5)}`}
-      isPreview={viewData.isPreview}
-      dataroomId={dataroomId}
-    />
-  ) : viewData.pages && !document.versions[0].isVertical ? (
-    <PagesHorizontalViewer
-      pages={viewData.pages}
-      viewId={viewData.viewId}
-      isPreview={viewData.isPreview}
-      linkId={link.id}
-      documentId={document.id}
-      assistantEnabled={document.assistantEnabled}
-      allowDownload={link.allowDownload!}
-      feedbackEnabled={link.enableFeedback!}
-      screenshotProtectionEnabled={link.enableScreenshotProtection!}
-      versionNumber={document.versions[0].versionNumber}
-      brand={brand}
-      showPoweredByBanner={showPoweredByBanner}
-      showAccountCreationSlide={showAccountCreationSlide}
-      enableQuestion={link.enableQuestion}
-      feedback={link.feedback}
-      viewerEmail={viewerEmail}
-      watermarkConfig={
-        link.enableWatermark ? (link.watermarkConfig as WatermarkConfig) : null
-      }
-      ipAddress={viewData.ipAddress}
-      linkName={link.name ?? `Link #${link.id.slice(-5)}`}
-      dataroomId={dataroomId}
-    />
-  ) : viewData.pages && document.versions[0].isVertical ? (
-    <PagesVerticalViewer
-      pages={viewData.pages}
-      viewId={viewData.viewId}
-      isPreview={viewData.isPreview}
-      linkId={link.id}
-      documentId={document.id}
-      assistantEnabled={document.assistantEnabled}
-      allowDownload={link.allowDownload!}
-      feedbackEnabled={link.enableFeedback!}
-      screenshotProtectionEnabled={link.enableScreenshotProtection!}
-      versionNumber={document.versions[0].versionNumber}
-      brand={brand}
-      showPoweredByBanner={showPoweredByBanner}
-      showAccountCreationSlide={showAccountCreationSlide}
-      enableQuestion={link.enableQuestion}
-      feedback={link.feedback}
-      viewerEmail={viewerEmail}
-      watermarkConfig={
-        link.enableWatermark ? (link.watermarkConfig as WatermarkConfig) : null
-      }
-      ipAddress={viewData.ipAddress}
-      linkName={link.name ?? `Link #${link.id.slice(-5)}`}
-      dataroomId={dataroomId}
-    />
-  ) : viewData.fileType === "video" ? (
-    <VideoViewer
-      file={viewData.file!}
+      dataroomName={dataroomName}
       linkId={link.id}
       viewId={viewData.viewId}
-      documentId={document.id}
-      documentName={document.name}
-      allowDownload={link.allowDownload!}
-      screenshotProtectionEnabled={link.enableScreenshotProtection!}
-      versionNumber={document.versions[0].versionNumber}
-      brand={brand}
-      isPreview={viewData.isPreview}
-      dataroomId={dataroomId}
-    />
-  ) : (
-    <PDFViewer
-      file={viewData.file}
-      viewId={viewData.viewId}
-      isPreview={viewData.isPreview}
-      linkId={link.id}
-      documentId={document.id}
-      name={document.name}
-      allowDownload={link.allowDownload}
-      assistantEnabled={document.assistantEnabled}
-      versionNumber={document.versions[0].versionNumber}
-      dataroomId={dataroomId}
-    />
+      viewerId={"viewerId" in viewData ? viewData.viewerId : undefined}
+    >
+      <ViewerChatLayout>
+        {notionData?.recordMap ? (
+          <NotionPage
+            recordMap={notionData.recordMap}
+            versionNumber={document.versions[0].versionNumber}
+            theme={notionData.theme}
+            screenshotProtectionEnabled={link.enableScreenshotProtection!}
+            navData={navData}
+          />
+        ) : viewData.fileType === "link" ? (
+          <LinkPreview
+            linkUrl={viewData.file || document.versions[0]?.file || ""}
+            linkName={document.name}
+            versionNumber={document.versions[0]?.versionNumber || 1}
+            navData={navData}
+          />
+        ) : document.downloadOnly ? (
+          <DownloadOnlyViewer
+            versionNumber={document.versions[0].versionNumber}
+            documentName={document.name}
+            navData={navData}
+          />
+        ) : viewData.fileType === "sheet" && viewData.sheetData ? (
+          <ExcelViewer
+            versionNumber={document.versions[0].versionNumber}
+            sheetData={viewData.sheetData}
+            screenshotProtectionEnabled={link.enableScreenshotProtection!}
+            navData={navData}
+          />
+        ) : viewData.fileType === "sheet" && useAdvancedExcelViewer ? (
+          <AdvancedExcelViewer
+            file={viewData.file!}
+            versionNumber={document.versions[0].versionNumber}
+            navData={navData}
+          />
+        ) : viewData.fileType === "image" ? (
+          <ImageViewer
+            file={viewData.file!}
+            screenshotProtectionEnabled={link.enableScreenshotProtection!}
+            versionNumber={document.versions[0].versionNumber}
+            showPoweredByBanner={showPoweredByBanner}
+            viewerEmail={viewerEmail}
+            watermarkConfig={
+              link.enableWatermark
+                ? (link.watermarkConfig as WatermarkConfig)
+                : null
+            }
+            ipAddress={viewData.ipAddress}
+            linkName={link.name ?? `Link #${link.id.slice(-5)}`}
+            navData={navData}
+          />
+        ) : viewData.pages && !document.versions[0].isVertical ? (
+          <PagesHorizontalViewer
+            pages={viewData.pages}
+            feedbackEnabled={link.enableFeedback!}
+            screenshotProtectionEnabled={link.enableScreenshotProtection!}
+            versionNumber={document.versions[0].versionNumber}
+            showPoweredByBanner={showPoweredByBanner}
+            showAccountCreationSlide={showAccountCreationSlide}
+            enableQuestion={link.enableQuestion}
+            feedback={link.feedback}
+            viewerEmail={viewerEmail}
+            watermarkConfig={
+              link.enableWatermark
+                ? (link.watermarkConfig as WatermarkConfig)
+                : null
+            }
+            ipAddress={viewData.ipAddress}
+            linkName={link.name ?? `Link #${link.id.slice(-5)}`}
+            navData={navData}
+          />
+        ) : viewData.pages && document.versions[0].isVertical ? (
+          <PagesVerticalViewer
+            pages={viewData.pages}
+            feedbackEnabled={link.enableFeedback!}
+            screenshotProtectionEnabled={link.enableScreenshotProtection!}
+            versionNumber={document.versions[0].versionNumber}
+            showPoweredByBanner={showPoweredByBanner}
+            enableQuestion={link.enableQuestion}
+            feedback={link.feedback}
+            viewerEmail={viewerEmail}
+            watermarkConfig={
+              link.enableWatermark
+                ? (link.watermarkConfig as WatermarkConfig)
+                : null
+            }
+            ipAddress={viewData.ipAddress}
+            linkName={link.name ?? `Link #${link.id.slice(-5)}`}
+            navData={navData}
+          />
+        ) : viewData.fileType === "video" ? (
+          <VideoViewer
+            file={viewData.file!}
+            screenshotProtectionEnabled={link.enableScreenshotProtection!}
+            versionNumber={document.versions[0].versionNumber}
+            navData={navData}
+          />
+        ) : (
+          <PDFViewer
+            file={viewData.file}
+            name={document.name}
+            versionNumber={document.versions[0].versionNumber}
+            navData={navData}
+          />
+        )}
+      </ViewerChatLayout>
+
+      {/* AI Chat Components */}
+      <ViewerChatPanel />
+      <ViewerChatToggle />
+    </ViewerChatProvider>
   );
 }

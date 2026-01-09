@@ -2,17 +2,49 @@ import { useRouter } from "next/router";
 
 import { memo, useMemo } from "react";
 
-import { DataroomDocument, DataroomFolder } from "@prisma/client";
+import { DataroomFolder } from "@prisma/client";
+import { HomeIcon } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import {
+  HIERARCHICAL_DISPLAY_STYLE,
+  getHierarchicalDisplayName,
+} from "@/lib/utils/hierarchical-display";
 
 import { FileTree } from "@/components/ui/nextra-filetree";
 
 import { buildNestedFolderStructureWithDocs } from "./utils";
+
+const ViewerDocumentFileItem = memo(
+  ({
+    document,
+    dataroomIndexEnabled,
+  }: {
+    document: DataroomDocumentWithVersion;
+    dataroomIndexEnabled?: boolean;
+  }) => {
+    const documentDisplayName = getHierarchicalDisplayName(
+      document.name,
+      document.hierarchicalIndex,
+      dataroomIndexEnabled || false,
+    );
+
+    return (
+      <FileTree.File
+        name={documentDisplayName}
+        // onToggle={() => router.push(`/documents/${document.id}`)}
+      />
+    );
+  },
+);
+ViewerDocumentFileItem.displayName = "ViewerDocumentFileItem";
 
 type DataroomDocumentWithVersion = {
   dataroomDocumentId: string;
   folderId: string | null;
   id: string;
   name: string;
+  hierarchicalIndex: string | null;
   versions: {
     id: string;
     versionNumber: number;
@@ -27,12 +59,17 @@ type DataroomFolderWithDocuments = DataroomFolder & {
     folderId: string | null;
     id: string;
     name: string;
+    hierarchicalIndex: string | null;
   }[];
 };
 
-type FolderPath = Set<string> | null
+type FolderPath = Set<string> | null;
 
-function findFolderPath(folder: DataroomFolderWithDocuments, folderId: string, currentPath: Set<string> = new Set<string>()):FolderPath {
+function findFolderPath(
+  folder: DataroomFolderWithDocuments,
+  folderId: string,
+  currentPath: Set<string> = new Set<string>(),
+): FolderPath {
   if (folder.id === folderId) {
     return currentPath.add(folder.id);
   }
@@ -52,26 +89,38 @@ const FolderComponent = memo(
     folder,
     folderId,
     setFolderId,
-    folderPath
+    folderPath,
+    dataroomIndexEnabled,
   }: {
     folder: DataroomFolderWithDocuments;
     folderId: string | null;
     setFolderId: React.Dispatch<React.SetStateAction<string | null>>;
     folderPath: Set<string> | null;
+    dataroomIndexEnabled?: boolean;
   }) => {
     const router = useRouter();
+
+    // Get hierarchical display name for the folder
+    const folderDisplayName = getHierarchicalDisplayName(
+      folder.name,
+      folder.hierarchicalIndex,
+      dataroomIndexEnabled || false,
+    );
 
     // Memoize the rendering of the current folder's documents
     const documents = useMemo(
       () =>
         folder.documents.map((doc) => (
-          <FileTree.File
+          <ViewerDocumentFileItem
             key={doc.id}
-            name={doc.name}
-            // onToggle={() => router.push(`/documents/${doc.id}`)}
+            document={{
+              ...doc,
+              versions: [], // Not needed for display
+            }}
+            dataroomIndexEnabled={dataroomIndexEnabled}
           />
         )),
-      [folder.documents, router.query.name],
+      [folder.documents, dataroomIndexEnabled],
     );
 
     // Recursively render child folders if they exist
@@ -84,15 +133,22 @@ const FolderComponent = memo(
             folderId={folderId}
             setFolderId={setFolderId}
             folderPath={folderPath}
+            dataroomIndexEnabled={dataroomIndexEnabled}
           />
         )),
-      [folder.childFolders, folderId, setFolderId],
+      [
+        folder.childFolders,
+        folderId,
+        setFolderId,
+        folderPath,
+        dataroomIndexEnabled,
+      ],
     );
 
     const isActive = folder.id === folderId;
-    const isChildActive = folderPath?.has(folder.id) || folder.childFolders.some(
-      (childFolder) => childFolder.id === folderId,
-    );
+    const isChildActive =
+      folderPath?.has(folder.id) ||
+      folder.childFolders.some((childFolder) => childFolder.id === folderId);
 
     return (
       <div
@@ -103,7 +159,7 @@ const FolderComponent = memo(
         }}
       >
         <FileTree.Folder
-          name={folder.name}
+          name={folderDisplayName}
           key={folder.id}
           active={isActive}
           childActive={isChildActive}
@@ -118,16 +174,54 @@ const FolderComponent = memo(
 );
 FolderComponent.displayName = "FolderComponent";
 
+const HomeLink = memo(
+  ({
+    folderId,
+    setFolderId,
+  }: {
+    folderId: string | null;
+    setFolderId: React.Dispatch<React.SetStateAction<string | null>>;
+  }) => {
+    return (
+      <li
+        className={cn(
+          "flex list-none",
+          "rounded-md text-foreground transition-all duration-200 ease-in-out",
+          "hover:bg-gray-100 hover:shadow-sm hover:dark:bg-muted",
+          "px-3 py-1.5 leading-6",
+          folderId === null && "bg-gray-100 font-semibold dark:bg-muted",
+        )}
+      >
+        <span
+          className="inline-flex w-full cursor-pointer items-center"
+          onClick={(e) => {
+            e.preventDefault();
+            setFolderId(null);
+          }}
+        >
+          <HomeIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span className="ml-2 w-fit truncate" title="Home">
+            Dataroom Home
+          </span>
+        </span>
+      </li>
+    );
+  },
+);
+HomeLink.displayName = "HomeLink";
+
 const SidebarFolders = ({
   folders,
   documents,
   folderId,
   setFolderId,
+  dataroomIndexEnabled,
 }: {
   folders: DataroomFolder[];
   documents: DataroomDocumentWithVersion[];
   folderId: string | null;
   setFolderId: React.Dispatch<React.SetStateAction<string | null>>;
+  dataroomIndexEnabled?: boolean;
 }) => {
   const nestedFolders = useMemo(() => {
     if (folders) {
@@ -149,10 +243,11 @@ const SidebarFolders = ({
     }
 
     return null;
-  }, [folders, documents, folderId])
+  }, [folders, documents, folderId]);
 
   return (
     <FileTree>
+      <HomeLink folderId={folderId} setFolderId={setFolderId} />
       {nestedFolders.map((folder) => (
         <FolderComponent
           key={folder.id}
@@ -160,6 +255,7 @@ const SidebarFolders = ({
           folderId={folderId}
           setFolderId={setFolderId}
           folderPath={folderPath}
+          dataroomIndexEnabled={dataroomIndexEnabled}
         />
       ))}
     </FileTree>
@@ -171,11 +267,13 @@ export function ViewFolderTree({
   documents,
   setFolderId,
   folderId,
+  dataroomIndexEnabled,
 }: {
   folders: DataroomFolder[];
   documents: DataroomDocumentWithVersion[];
   setFolderId: React.Dispatch<React.SetStateAction<string | null>>;
   folderId: string | null;
+  dataroomIndexEnabled?: boolean;
 }) {
   if (!folders) return null;
 
@@ -185,6 +283,7 @@ export function ViewFolderTree({
       documents={documents}
       setFolderId={setFolderId}
       folderId={folderId}
+      dataroomIndexEnabled={dataroomIndexEnabled}
     />
   );
 }

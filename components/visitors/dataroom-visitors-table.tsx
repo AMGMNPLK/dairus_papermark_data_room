@@ -1,12 +1,22 @@
+import Link from "next/link";
+
+import { useState } from "react";
+
 import { useTeam } from "@/context/team-context";
 import {
+  AlertTriangleIcon,
   BadgeCheckIcon,
   BadgeInfoIcon,
+  Download,
   DownloadCloudIcon,
   FileBadgeIcon,
   MailOpenIcon,
 } from "lucide-react";
-import { toast } from "sonner";
+
+import { usePlan } from "@/lib/swr/use-billing";
+import { useDataroom } from "@/lib/swr/use-dataroom";
+import { useDataroomVisits } from "@/lib/swr/use-dataroom";
+import { timeAgo } from "@/lib/utils";
 
 import ChevronDown from "@/components/shared/icons/chevron-down";
 import { Button } from "@/components/ui/button";
@@ -24,11 +34,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TimestampTooltip } from "@/components/ui/timestamp-tooltip";
 import { BadgeTooltip } from "@/components/ui/tooltip";
 
-import { useDataroomVisits } from "@/lib/swr/use-dataroom";
-import { timeAgo } from "@/lib/utils";
-
+import { ExportVisitsModal } from "../datarooms/export-visits-modal";
 import DataroomVisitorCustomFields from "./dataroom-visitor-custom-fields";
 import { DataroomVisitorUserAgent } from "./dataroom-visitor-useragent";
 import DataroomVisitHistory from "./dataroom-visitors-history";
@@ -45,48 +54,24 @@ export default function DataroomVisitorsTable({
 }) {
   const teamInfo = useTeam();
   const teamId = teamInfo?.currentTeam?.id;
-  const { views } = useDataroomVisits({ dataroomId, groupId });
+  const { views, hiddenFromPause } = useDataroomVisits({
+    dataroomId,
+    groupId,
+  });
+  const { dataroom } = useDataroom();
+  const { isPaused } = usePlan();
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
-  const exportVisitCounts = async (dataroomId: string) => {
-    const formattedTime = new Date().toISOString().replace(/[-:Z]/g, "");
-    try {
-      const response = await fetch(
-        `/api/teams/${teamId}/datarooms/${dataroomId}${groupId ? `/groups/${groupId}` : ""}/export-visits`,
-        { method: "GET" },
-      );
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-
-      // Create blob and download
-      const blob = new Blob([data.visits], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute(
-        "download",
-        `${data.dataroomName}_${name ? `${name}_` : ""}visits_${formattedTime}.csv`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      toast.success("CSV file downloaded successfully");
-    } catch (error) {
-      console.error("Error:", error);
-      toast.error(
-        "An error occurred while downloading the CSV. Please try again.",
-      );
-    }
+  const exportVisitCounts = () => {
+    setExportModalOpen(true);
   };
 
   return (
     <div className="w-full">
       <div className="mb-2 flex items-center justify-between md:mb-4">
         <h2>All visitors</h2>
-        <Button size="sm" onClick={() => exportVisitCounts(dataroomId)}>
+        <Button variant="outline" size="sm" onClick={exportVisitCounts}>
+          <Download className="!size-4" />
           Export visits
         </Button>
       </div>
@@ -102,14 +87,40 @@ export default function DataroomVisitorsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {views?.length === 0 && (
+            {views?.length === 0 && hiddenFromPause === 0 && (
               <TableRow>
                 <TableCell colSpan={5}>
                   <div className="flex h-40 w-full items-center justify-center">
-                    <p>No Data Available</p>
+                    <p>No views yet. Try sharing a link.</p>
                   </div>
                 </TableCell>
               </TableRow>
+            )}
+            {isPaused && hiddenFromPause > 0 && (
+              <>
+                <TableRow>
+                  <TableCell colSpan={3} className="text-left sm:text-center">
+                    <div className="flex flex-col items-start justify-center gap-2 sm:flex-row sm:items-center">
+                      <span className="flex items-center gap-x-1">
+                        <AlertTriangleIcon className="inline-block h-4 w-4 text-orange-500" />
+                        {hiddenFromPause} visit
+                        {hiddenFromPause !== 1 ? "s" : ""} occurred after your
+                        team was paused and{" "}
+                        {hiddenFromPause !== 1 ? "are" : "is"} hidden.{" "}
+                      </span>
+                      <Link
+                        href="/settings/billing"
+                        className="font-medium text-orange-600 underline hover:text-orange-700"
+                      >
+                        Unpause subscription to see all visits
+                      </Link>
+                    </div>
+                  </TableCell>
+                </TableRow>
+                {Array.from({ length: hiddenFromPause }).map((_, i) => (
+                  <VisitorBlurred key={i} />
+                ))}
+              </>
             )}
             {views ? (
               views.map((view) => (
@@ -125,11 +136,11 @@ export default function DataroomVisitorsTable({
                               <p className="flex items-center gap-x-2 overflow-visible text-sm font-medium text-gray-800 dark:text-gray-200">
                                 {view.viewerEmail ? (
                                   <>
-                                    {view.viewerEmail}{" "}
+                                    {view.viewerName || view.viewerEmail}{" "}
                                     {view.verified && (
                                       <BadgeTooltip
                                         content="Verified visitor"
-                                        key="verified"
+                                        key={`verified-${view.id}`}
                                       >
                                         <BadgeCheckIcon className="h-4 w-4 text-emerald-500 hover:text-emerald-600" />
                                       </BadgeTooltip>
@@ -137,7 +148,7 @@ export default function DataroomVisitorsTable({
                                     {view.internal && (
                                       <BadgeTooltip
                                         content="Internal visitor"
-                                        key="internal"
+                                        key={`internal-${view.id}`}
                                       >
                                         <BadgeInfoIcon className="h-4 w-4 text-blue-500 hover:text-blue-600" />
                                       </BadgeTooltip>
@@ -145,7 +156,7 @@ export default function DataroomVisitorsTable({
                                     {view.downloadedAt && (
                                       <BadgeTooltip
                                         content={`Downloaded ${timeAgo(view.downloadedAt)}`}
-                                        key="download"
+                                        key={`download-${view.id}`}
                                       >
                                         <DownloadCloudIcon className="h-4 w-4 text-cyan-500 hover:text-cyan-600" />
                                       </BadgeTooltip>
@@ -153,7 +164,7 @@ export default function DataroomVisitorsTable({
                                     {view.agreementResponse && (
                                       <BadgeTooltip
                                         content={`Agreed to ${view.agreementResponse.agreement.name}`}
-                                        key="nda-agreement"
+                                        key={`agreement-${view.id}`}
                                       >
                                         <FileBadgeIcon className="h-4 w-4 text-emerald-500 hover:text-emerald-600" />
                                       </BadgeTooltip>
@@ -163,6 +174,11 @@ export default function DataroomVisitorsTable({
                                   "Anonymous"
                                 )}
                               </p>
+                              {view.viewerName && view.viewerEmail && (
+                                <p className="text-xs text-muted-foreground/60">
+                                  {view.viewerEmail}
+                                </p>
+                              )}
                               <p className="text-xs text-muted-foreground/60 sm:text-sm">
                                 {view.link.name ? view.link.name : view.linkId}
                               </p>
@@ -188,9 +204,18 @@ export default function DataroomVisitorsTable({
                       </TableCell> */}
                       {/* Last Viewed */}
                       <TableCell className="text-sm text-muted-foreground">
-                        <time dateTime={new Date(view.viewedAt).toISOString()}>
-                          {timeAgo(view.viewedAt)}
-                        </time>
+                        <TimestampTooltip
+                          timestamp={view.viewedAt}
+                          side="right"
+                          rows={["local", "utc", "unix"]}
+                        >
+                          <time
+                            className="select-none"
+                            dateTime={new Date(view.viewedAt).toISOString()}
+                          >
+                            {timeAgo(view.viewedAt)}
+                          </time>
+                        </TimestampTooltip>
                       </TableCell>
                       {/* Actions */}
                       <TableCell className="cursor-pointer p-0 text-center sm:text-right">
@@ -223,23 +248,24 @@ export default function DataroomVisitorsTable({
                           </TableCell>
 
                           <TableCell>
-                            <div>
+                            <TimestampTooltip
+                              timestamp={view.viewedAt}
+                              side="right"
+                              rows={["local", "utc", "unix"]}
+                            >
                               <time
-                                className="truncate text-sm text-muted-foreground"
-                                dateTime={new Date(
-                                  view.viewedAt,
-                                ).toLocaleString()}
-                                title={new Date(view.viewedAt).toLocaleString()}
+                                className="select-none truncate text-sm text-muted-foreground"
+                                dateTime={new Date(view.viewedAt).toISOString()}
                               >
                                 {timeAgo(view.viewedAt)}
                               </time>
-                            </div>
+                            </TimestampTooltip>
                           </TableCell>
                           <TableCell className="table-cell"></TableCell>
                         </TableRow>
 
                         {view.downloadedAt ? (
-                          <TableRow key={view.id + 1}>
+                          <TableRow key={`download-item-${view.id}`}>
                             <TableCell>
                               <div className="flex items-center gap-x-4 overflow-visible">
                                 <DownloadCloudIcon className="h-5 w-5 text-cyan-500 hover:text-cyan-600" />
@@ -248,19 +274,20 @@ export default function DataroomVisitorsTable({
                             </TableCell>
 
                             <TableCell>
-                              <div>
+                              <TimestampTooltip
+                                timestamp={view.downloadedAt}
+                                side="right"
+                                rows={["local", "utc", "unix"]}
+                              >
                                 <time
-                                  className="truncate text-sm text-muted-foreground"
+                                  className="select-none truncate text-sm text-muted-foreground"
                                   dateTime={new Date(
                                     view.downloadedAt,
-                                  ).toLocaleString()}
-                                  title={new Date(
-                                    view.downloadedAt,
-                                  ).toLocaleString()}
+                                  ).toISOString()}
                                 >
                                   {timeAgo(view.downloadedAt)}
                                 </time>
-                              </div>
+                              </TimestampTooltip>
                             </TableCell>
                             <TableCell className="table-cell"></TableCell>
                           </TableRow>
@@ -294,6 +321,56 @@ export default function DataroomVisitorsTable({
           </TableBody>
         </Table>
       </div>
+
+      {dataroom && teamId && exportModalOpen && (
+        <ExportVisitsModal
+          dataroomId={dataroomId}
+          dataroomName={dataroom.name}
+          teamId={teamId}
+          groupId={groupId}
+          groupName={name}
+          onClose={() => setExportModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
+
+// create a component for a blurred view of the visitor
+const VisitorBlurred = () => {
+  return (
+    <TableRow className="blur-sm">
+      <TableCell className="">
+        <div className="flex items-center overflow-visible sm:space-x-3">
+          <VisitorAvatar viewerEmail={"abc@example.org"} />
+          <div className="min-w-0 flex-1">
+            <div className="focus:outline-none">
+              <p className="flex items-center gap-x-2 overflow-visible text-sm font-medium text-gray-800 dark:text-gray-200">
+                Anonymous
+              </p>
+              <p className="text-xs text-muted-foreground/60 sm:text-sm">
+                Demo link
+              </p>
+            </div>
+          </div>
+        </div>
+      </TableCell>
+      {/* Last Viewed */}
+      <TableCell className="text-sm text-muted-foreground">
+        <time
+          dateTime={new Date(
+            new Date().getTime() - 30 * 24 * 60 * 60 * 1000,
+          ).toISOString()}
+        >
+          {timeAgo(new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000))}
+        </time>
+      </TableCell>
+      {/* Actions */}
+      <TableCell className="cursor-pointer p-0 text-center sm:text-right">
+        <div className="flex justify-end space-x-1 p-5 [&[data-state=open]>svg.chevron]:rotate-180">
+          <ChevronDown className="chevron h-4 w-4 shrink-0 transition-transform duration-200" />
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+};

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 
+import { LinkPreset } from "@prisma/client";
 import { motion } from "motion/react";
 
-import { Textarea } from "@/components/ui/textarea";
-
 import { FADE_IN_ANIMATION_SETTINGS } from "@/lib/constants";
-import { sanitizeAllowDenyList } from "@/lib/utils";
+import { sanitizeList } from "@/lib/utils";
+
+import { Textarea } from "@/components/ui/textarea";
 
 import { DEFAULT_LINK_TYPE } from ".";
 import LinkItem from "./link-item";
@@ -16,6 +17,7 @@ export default function AllowListSection({
   setData,
   isAllowed,
   handleUpgradeStateChange,
+  presets,
 }: {
   data: DEFAULT_LINK_TYPE;
   setData: React.Dispatch<React.SetStateAction<DEFAULT_LINK_TYPE>>;
@@ -24,7 +26,9 @@ export default function AllowListSection({
     state,
     trigger,
     plan,
+    highlightItem,
   }: LinkUpgradeOptions) => void;
+  presets: LinkPreset | null;
 }) {
   const { emailProtected, allowList } = data;
 
@@ -38,13 +42,20 @@ export default function AllowListSection({
 
   useEffect(() => {
     // Update the allowList in the data state when their inputs change
-    const newAllowList = sanitizeAllowDenyList(allowListInput);
+    const newAllowList = sanitizeList(allowListInput);
     setEnabled((prevEnabled) => prevEnabled && emailProtected);
     setData((prevData) => ({
       ...prevData,
       allowList: emailProtected && enabled ? newAllowList : [],
     }));
   }, [allowListInput, emailProtected, enabled, setData]);
+
+  useEffect(() => {
+    if (isAllowed && presets?.allowList && presets.allowList.length > 0) {
+      setEnabled(true);
+      setAllowListInput(presets.allowList.join("\n") || "");
+    }
+  }, [presets, isAllowed]);
 
   const handleEnableAllowList = () => {
     const updatedEnabled = !enabled;
@@ -53,7 +64,7 @@ export default function AllowListSection({
     if (updatedEnabled) {
       setData((prevData) => ({
         ...prevData,
-        allowList: updatedEnabled ? sanitizeAllowDenyList(allowListInput) : [],
+        allowList: updatedEnabled ? sanitizeList(allowListInput) : [],
         emailAuthenticated: true, // Turn on email authentication
         emailProtected: true, // Turn on email protection
       }));
@@ -87,6 +98,7 @@ export default function AllowListSection({
               state: true,
               trigger: "link_sheet_allowlist_section",
               plan: "Business",
+              highlightItem: ["allow-block"],
             })
           }
         />
@@ -99,7 +111,9 @@ export default function AllowListSection({
             <Textarea
               className="focus:ring-inset"
               rows={5}
-              placeholder="Enter allowed emails/domains, one per line, e.g.                                      marc@papermark.io                                                                                   @example.org"
+              placeholder={`Enter allowed emails/domains, one per line, e.g.
+marc@papermark.com
+@example.org`}
               value={allowListInput}
               onChange={handleAllowListChange}
             />

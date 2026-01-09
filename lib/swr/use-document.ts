@@ -2,8 +2,8 @@ import { useRouter } from "next/router";
 
 import { useTeam } from "@/context/team-context";
 import { View } from "@prisma/client";
+import { toast } from "sonner";
 import useSWR from "swr";
-import useSWRImmutable from "swr/immutable";
 
 import { DocumentWithVersion, LinkWithViews } from "@/lib/types";
 import { fetcher } from "@/lib/utils";
@@ -28,7 +28,20 @@ export function useDocument() {
       )}`,
     fetcher,
     {
-      dedupingInterval: 10000,
+      // Reduce background-driven revalidation to avoid excessive API traffic
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      onError: (err) => {
+        if (err.status === 404) {
+          toast.error("Document not found", {
+            description:
+              "The document you're looking for doesn't exist or has been moved.",
+          });
+          router.replace("/documents");
+        }
+      },
     },
   );
 
@@ -49,7 +62,11 @@ export function useDocumentLinks() {
     id: string;
   };
 
-  const { data: links, error } = useSWR<LinkWithViews[]>(
+  const {
+    data: links,
+    error,
+    mutate,
+  } = useSWR<LinkWithViews[]>(
     teamInfo?.currentTeam?.id &&
       id &&
       `/api/teams/${teamInfo?.currentTeam?.id}/documents/${encodeURIComponent(
@@ -65,6 +82,7 @@ export function useDocumentLinks() {
     links,
     loading: !error && !links,
     error,
+    mutate,
   };
 }
 
@@ -100,6 +118,7 @@ type TStatsData = {
   hiddenViewCount: number;
   viewsWithDuration: ViewWithDuration[];
   totalViews: number;
+  hiddenFromPause: number;
 };
 
 export function useDocumentVisits(page: number, limit: number) {

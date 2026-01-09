@@ -7,6 +7,7 @@ import {
   ViewerGroup,
   ViewerGroupAccessControls,
   ViewerGroupMembership,
+  ViewerInvitation,
 } from "@prisma/client";
 import useSWR from "swr";
 
@@ -14,7 +15,7 @@ import { fetcher } from "@/lib/utils";
 
 import { LinkWithViews } from "../types";
 
-export default function useDataroomGroups() {
+export default function useDataroomGroups({ documentId }: { documentId?: string } = {}) {
   const teamInfo = useTeam();
   const router = useRouter();
 
@@ -24,6 +25,7 @@ export default function useDataroomGroups() {
   };
 
   type ViewerGroupWithCount = ViewerGroup & {
+    accessControls: ViewerGroupAccessControls[];
     _count: {
       members: number;
       views: number;
@@ -38,7 +40,8 @@ export default function useDataroomGroups() {
     teamInfo?.currentTeam?.id &&
       id &&
       isDataroom &&
-      `/api/teams/${teamInfo?.currentTeam?.id}/datarooms/${id}/groups`,
+    `/api/teams/${teamInfo?.currentTeam?.id}/datarooms/${id}/groups${documentId ? `?documentId=${documentId}` : ""
+    }`,
     fetcher,
     { dedupingInterval: 30000 },
   );
@@ -78,7 +81,7 @@ export function useDataroomGroupLinks() {
 }
 
 type ViewerGroupWithMembers = ViewerGroup & {
-  members: (ViewerGroupMembership & { viewer: Viewer })[];
+  members: (ViewerGroupMembership & { viewer: Viewer & { invitations?: ViewerInvitation[] } })[];
   accessControls: ViewerGroupAccessControls[];
 };
 

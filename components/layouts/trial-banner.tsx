@@ -1,15 +1,21 @@
 import { Dispatch, SetStateAction, useEffect, useState } from "react";
 
+import { useTeam } from "@/context/team-context";
 import { PlanEnum } from "@/ee/stripe/constants";
 import Cookies from "js-cookie";
-import { usePlausible } from "next-plausible";
-
-import { UpgradePlanModal } from "@/components/billing/upgrade-plan-modal";
-import X from "@/components/shared/icons/x";
+import { CrownIcon } from "lucide-react";
 
 import { usePlan } from "@/lib/swr/use-billing";
 import useDatarooms from "@/lib/swr/use-datarooms";
 import { daysLeft } from "@/lib/utils";
+
+import { UpgradePlanModalWithDiscount } from "@/components/billing/upgrade-plan-modal-with-discount";
+import {
+  Alert,
+  AlertClose,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 
 export default function TrialBanner() {
   const { trial } = usePlan();
@@ -36,11 +42,10 @@ function TrialBannerComponent({
 }: {
   setShowTrialBanner: Dispatch<SetStateAction<boolean | null>>;
 }) {
-  const plausible = usePlausible();
+  const teamInfo = useTeam();
 
   const handleHideBanner = () => {
     setShowTrialBanner(false);
-    plausible("clickedHideTrialBanner");
     Cookies.set("hideTrialBanner", "trial-banner", {
       expires: 1,
     });
@@ -48,42 +53,66 @@ function TrialBannerComponent({
 
   const { datarooms } = useDatarooms();
 
-  return (
-    <div className="mx-2 my-2 mb-2 rounded-xl border border-gray-900 bg-white p-1 dark:border-gray-600 dark:bg-gray-900">
-      <nav className="relative flex flex-col bg-white px-4 py-3 dark:bg-gray-900">
-        <button
-          type="button"
-          onClick={handleHideBanner}
-          className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
-        >
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </button>
-        <div className="flex flex-col space-y-2">
-          <div className="text-sm font-bold">
-            Data Room trial:{" "}
-            {datarooms && daysLeft(new Date(datarooms[0].createdAt), 7)} days
-            left
-          </div>
+  const trialDaysLeft = datarooms
+    ? daysLeft(
+        new Date(
+          datarooms[0]?.createdAt ??
+            teamInfo?.currentTeam?.createdAt ??
+            new Date(),
+        ),
+        7,
+      )
+    : 0;
 
-          <div className="text-sm">
-            You are on a data room trial, you have access to advanced link
-            permissions and data room.{" "}
-            <UpgradePlanModal
-              clickedPlan={PlanEnum.DataRooms}
-              trigger={"trial_navbar"}
-            >
-              <span
-                className="cursor-pointer font-bold text-orange-500"
-                onClick={() => plausible("clickedUpgradeTrialNavbar")}
+  const isExpired = trialDaysLeft <= 0;
+
+  return (
+    <div className="mx-2 my-2 mb-2">
+      <Alert
+        variant="default"
+        className={
+          isExpired ? "border-2 border-red-500 dark:border-red-600" : ""
+        }
+      >
+        <CrownIcon className="h-4 w-4" />
+        <AlertTitle>
+          {isExpired
+            ? "Your Data Room trial has expired"
+            : `Data Room trial: ${trialDaysLeft} days left`}
+        </AlertTitle>
+        <AlertDescription>
+          {isExpired ? (
+            <>
+              <UpgradePlanModalWithDiscount
+                clickedPlan={PlanEnum.DataRooms}
+                trigger={"trial_navbar"}
               >
-                Upgrade to keep access
-              </span>
-            </UpgradePlanModal>
-            , get more data rooms and custom domains ✨
-          </div>
-        </div>
-      </nav>
+                <span className="cursor-pointer font-bold text-black underline underline-offset-4 hover:text-gray-700 dark:text-white dark:hover:text-gray-300">
+                  Upgrade to keep access
+                </span>
+              </UpgradePlanModalWithDiscount>{" "}
+              to unlimited data rooms, custom domains, advanced access controls,
+              and granular file permissions ✨
+            </>
+          ) : (
+            <>
+              You are on the <span className="font-bold">Data Rooms</span> plan
+              trial, you have access to advanced access controls, granular file
+              permissions, and data room. <br />
+              <UpgradePlanModalWithDiscount
+                clickedPlan={PlanEnum.DataRooms}
+                trigger={"trial_navbar"}
+              >
+                <span className="cursor-pointer font-bold text-orange-500 underline underline-offset-4 hover:text-orange-600">
+                  Upgrade to keep access
+                </span>
+              </UpgradePlanModalWithDiscount>
+              , unlock unlimited data rooms and custom domains ✨
+            </>
+          )}
+        </AlertDescription>
+        <AlertClose onClick={handleHideBanner} />
+      </Alert>
     </div>
   );
 }

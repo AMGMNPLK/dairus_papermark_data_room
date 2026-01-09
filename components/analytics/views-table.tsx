@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { useTeam } from "@/context/team-context";
 import { PlanEnum } from "@/ee/stripe/constants";
@@ -16,6 +16,7 @@ import {
 } from "@tanstack/react-table";
 import { format } from "date-fns";
 import {
+  AlertTriangleIcon,
   BadgeCheckIcon,
   BadgeInfoIcon,
   ChevronDownIcon,
@@ -24,8 +25,6 @@ import {
   Download,
   DownloadCloudIcon,
   FileBadgeIcon,
-  FileDigitIcon,
-  MoreHorizontalIcon,
   ServerIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
@@ -33,12 +32,11 @@ import {
 import { toast } from "sonner";
 import useSWR from "swr";
 
+import { usePlan } from "@/lib/swr/use-billing";
+import { cn, durationFormat, fetcher, timeAgo } from "@/lib/utils";
+import { downloadCSV } from "@/lib/utils/csv";
+
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Gauge } from "@/components/ui/gauge";
 import {
   Table,
@@ -48,20 +46,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TimestampTooltip } from "@/components/ui/timestamp-tooltip";
 import { BadgeTooltip } from "@/components/ui/tooltip";
 import { DataTablePagination } from "@/components/visitors/data-table-pagination";
 import { VisitorAvatar } from "@/components/visitors/visitor-avatar";
-import VisitorChart from "@/components/visitors/visitor-chart";
-import VisitorClicks from "@/components/visitors/visitor-clicks";
-import VisitorCustomFields from "@/components/visitors/visitor-custom-fields";
-import VisitorUserAgent from "@/components/visitors/visitor-useragent";
-import VisitorVideoChart from "@/components/visitors/visitor-video-chart";
 
-import { usePlan } from "@/lib/swr/use-billing";
-import { cn, durationFormat, fetcher, timeAgo } from "@/lib/utils";
-import { downloadCSV } from "@/lib/utils/csv";
-
-import { UpgradePlanModal } from "../billing/upgrade-plan-modal";
+import { UpgradeButton } from "../ui/upgrade-button";
 
 interface View {
   id: string;
@@ -86,7 +76,7 @@ interface View {
 const columns: ColumnDef<View>[] = [
   {
     accessorKey: "viewerEmail",
-    header: "Recent Visits",
+    header: "Recent Views",
     cell: ({ row }) => (
       <div className="flex items-center overflow-visible sm:space-x-3">
         <VisitorAvatar viewerEmail={row.original.viewerEmail} />
@@ -109,7 +99,7 @@ const columns: ColumnDef<View>[] = [
                   {row.original.agreementResponse && (
                     <BadgeTooltip
                       content={`Agreed to ${row.original.agreementResponse.agreement.name}`}
-                      key="nda-agreement"
+                      key="agreement"
                     >
                       <FileBadgeIcon className="h-4 w-4 text-emerald-500 hover:text-emerald-600" />
                     </BadgeTooltip>
@@ -259,7 +249,7 @@ const columns: ColumnDef<View>[] = [
             "px-0",
           )}
         >
-          Last Visited
+          Last Viewed
           {column.getIsSorted() === "asc" ? (
             <ChevronUpIcon className="ml-2 h-4 w-4" />
           ) : column.getIsSorted() === "desc" ? (
@@ -271,9 +261,15 @@ const columns: ColumnDef<View>[] = [
       );
     },
     cell: ({ row }) => (
-      <div className="text-sm text-muted-foreground">
-        {timeAgo(row.original.viewedAt)}
-      </div>
+      <TimestampTooltip
+        timestamp={row.original.viewedAt}
+        side="right"
+        rows={["local", "utc", "unix"]}
+      >
+        <div className="select-none text-sm text-muted-foreground">
+          {timeAgo(row.original.viewedAt)}
+        </div>
+      </TimestampTooltip>
     ),
   },
 ];
@@ -287,13 +283,13 @@ export default function ViewsTable({
 }) {
   const router = useRouter();
   const teamInfo = useTeam();
-  const { isTrial, isFree } = usePlan();
+  const { isTrial, isFree, isPaused } = usePlan();
   const { interval = "7d" } = router.query;
   const [sorting, setSorting] = useState<SortingState>([
     { id: "viewedAt", desc: true },
   ]);
 
-  const { data: views } = useSWR<View[]>(
+  const { data } = useSWR<{ views: View[]; hiddenFromPause: number }>(
     teamInfo?.currentTeam?.id
       ? `/api/analytics?type=views&interval=${interval}&teamId=${teamInfo.currentTeam.id}${interval === "custom" ? `&startDate=${format(startDate, "MM-dd-yyyy")}&endDate=${format(endDate, "MM-dd-yyyy")}` : ""}`
       : null,
@@ -303,6 +299,9 @@ export default function ViewsTable({
       revalidateOnFocus: false,
     },
   );
+
+  const views = data?.views;
+  const hiddenFromPause = data?.hiddenFromPause ?? 0;
 
   const table = useReactTable({
     data: views || [],
@@ -341,20 +340,15 @@ export default function ViewsTable({
   };
 
   const UpgradeOrExportButton = () => {
-    const [open, setOpen] = useState(false);
     if (isFree && !isTrial) {
       return (
-        <>
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-            Upgrade to Export
-          </Button>
-          <UpgradePlanModal
-            clickedPlan={PlanEnum.Pro}
-            trigger="dashboard_views_export"
-            open={open}
-            setOpen={setOpen}
-          />
-        </>
+        <UpgradeButton
+          text="Export"
+          clickedPlan={PlanEnum.Pro}
+          trigger="dashboard_views_export"
+          variant="outline"
+          size="sm"
+        />
       );
     } else {
       return (
@@ -368,10 +362,26 @@ export default function ViewsTable({
 
   return (
     <div className="space-y-4">
+      {isPaused && hiddenFromPause > 0 && (
+        <div className="flex flex-col items-start justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-800 dark:bg-orange-950 sm:flex-row sm:items-center">
+          <span className="flex items-center gap-x-1 text-sm">
+            <AlertTriangleIcon className="inline-block h-4 w-4 text-orange-500" />
+            {hiddenFromPause} view{hiddenFromPause !== 1 ? "s" : ""} occurred
+            after your team was paused and{" "}
+            {hiddenFromPause !== 1 ? "are" : "is"} hidden.{" "}
+          </span>
+          <Link
+            href="/settings/billing"
+            className="text-sm font-medium text-orange-600 underline hover:text-orange-700"
+          >
+            Unpause subscription to see all views
+          </Link>
+        </div>
+      )}
       <div className="flex justify-end">
         <UpgradeOrExportButton />
       </div>
-      <div className="rounded-xl border">
+      <div className="overflow-x-auto rounded-xl border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -438,7 +448,7 @@ export default function ViewsTable({
                   colSpan={columns.length}
                   className="h-24 text-center"
                 >
-                  <p>No visits in the last {interval}</p>
+                  <p>No views in the last {interval}</p>
                 </TableCell>
               </TableRow>
             )}

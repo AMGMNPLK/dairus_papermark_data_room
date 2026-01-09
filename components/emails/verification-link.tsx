@@ -2,15 +2,18 @@ import React from "react";
 
 import {
   Body,
-  Button,
   Container,
   Head,
+  Heading,
   Html,
+  Link,
   Preview,
   Section,
   Tailwind,
   Text,
 } from "@react-email/components";
+
+import { Footer } from "./shared/footer";
 
 const VerificationLinkEmail = ({
   url = "https://www.papermark.com",
@@ -20,31 +23,31 @@ const VerificationLinkEmail = ({
   return (
     <Html>
       <Head />
-      <Preview>Login to your Papermark account with a link</Preview>
+      <Preview>Your Papermark Login Link</Preview>
       <Tailwind>
         <Body className="mx-auto my-auto bg-white font-sans">
-          <Container className="mx-auto my-10 max-w-[500px] rounded border border-solid border-gray-200 px-10 py-5">
-            <Text className="mx-0 mb-8 mt-4 p-0 text-center text-2xl font-normal">
-              <span className="font-bold tracking-tighter">Papermark</span>
-            </Text>
-            <Text className="mx-0 my-7 p-0 text-center text-xl font-semibold text-black">
-              Your Papermark Login Link
-            </Text>
-
+          <Container className="mx-auto my-10 max-w-[600px] rounded border border-solid border-neutral-200 px-10 py-5">
+            <Section className="mt-8">
+              <Text className="text-2xl font-bold tracking-tighter">
+                Papermark
+              </Text>
+            </Section>
+            <Heading className="mx-0 my-7 p-0 text-lg font-medium text-black">
+              Your Login Link
+            </Heading>
             <Text className="text-sm leading-6 text-black">
-              Your Papermark Login Link
+              Welcome to Papermark!
             </Text>
             <Text className="text-sm leading-6 text-black">
               Please click the magic link below to sign in to your account.
             </Text>
-            <Section className="my-8 text-center">
-              <Button
-                className="rounded bg-black text-center text-xs font-semibold text-white no-underline"
+            <Section className="my-8">
+              <Link
+                className="rounded-lg bg-black px-6 py-3 text-center text-[12px] font-semibold text-white no-underline"
                 href={url}
-                style={{ padding: "12px 20px" }}
               >
                 Sign in
-              </Button>
+              </Link>
             </Section>
             <Text className="text-sm leading-6 text-black">
               or copy and paste this URL into your browser:
@@ -52,6 +55,7 @@ const VerificationLinkEmail = ({
             <Text className="max-w-sm flex-wrap break-words font-medium text-purple-600 no-underline">
               {url.replace(/^https?:\/\//, "")}
             </Text>
+            <Footer />
           </Container>
         </Body>
       </Tailwind>

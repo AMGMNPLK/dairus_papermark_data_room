@@ -17,6 +17,7 @@ export default function ScreenshotProtectionSection({
     state,
     trigger,
     plan,
+    highlightItem,
   }: LinkUpgradeOptions) => void;
 }) {
   const { enableScreenshotProtection } = data;
@@ -40,6 +41,7 @@ export default function ScreenshotProtectionSection({
       <LinkItem
         title="Enable screenshot protection"
         tooltipContent="Prevent users from taking screenshots of your content."
+        link="https://www.papermark.com/screenshot-protection"
         enabled={enabled}
         action={handleEnableScreenshotProtection}
         isAllowed={isAllowed}
@@ -49,6 +51,7 @@ export default function ScreenshotProtectionSection({
             state: true,
             trigger: "link_sheet_screenshot_protection_section",
             plan: "Business",
+            highlightItem: ["screenshot"],
           })
         }
       />

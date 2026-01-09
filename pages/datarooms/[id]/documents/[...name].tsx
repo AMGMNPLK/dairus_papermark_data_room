@@ -5,7 +5,11 @@ import { useState } from "react";
 import { useTeam } from "@/context/team-context";
 import { ArrowUpDownIcon, FolderPlusIcon, PlusIcon } from "lucide-react";
 
+import { useDataroom, useDataroomItems } from "@/lib/swr/use-dataroom";
+
+import DownloadDataroomButton from "@/components/datarooms/actions/download-dataroom";
 import GenerateIndexButton from "@/components/datarooms/actions/generate-index-button";
+import RebuildIndexButton from "@/components/datarooms/actions/rebuild-index-button";
 import { BreadcrumbComponent } from "@/components/datarooms/dataroom-breadcrumb";
 import { DataroomHeader } from "@/components/datarooms/dataroom-header";
 import { DataroomItemsList } from "@/components/datarooms/dataroom-items-list";
@@ -18,8 +22,6 @@ import { AddFolderModal } from "@/components/folders/add-folder-modal";
 import AppLayout from "@/components/layouts/app";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-
-import { useDataroom, useDataroomItems } from "@/lib/swr/use-dataroom";
 
 export default function Documents() {
   const router = useRouter();
@@ -48,8 +50,16 @@ export default function Documents() {
         </header>
 
         <div className="flex items-center justify-between gap-x-2">
-          <div>
+          <div className="flex items-center gap-x-2">
             <GenerateIndexButton
+              teamId={teamInfo?.currentTeam?.id!}
+              dataroomId={dataroom?.id!}
+            />
+            <RebuildIndexButton
+              teamId={teamInfo?.currentTeam?.id!}
+              dataroomId={dataroom?.id!}
+            />
+            <DownloadDataroomButton
               teamId={teamInfo?.currentTeam?.id!}
               dataroomId={dataroom?.id!}
             />
@@ -91,7 +101,7 @@ export default function Documents() {
                   onClick={() => setIsReordering(!isReordering)}
                 >
                   <ArrowUpDownIcon className="h-4 w-4" />
-                  Edit index
+                  Reorder
                 </Button>
               ) : null}
             </div>

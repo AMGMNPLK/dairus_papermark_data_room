@@ -5,7 +5,7 @@
  * https://github.com/shuding/nextra/blob/main/packages/nextra/src/components/file-tree.tsx
  *
  */
-import {
+import React, {
   createContext,
   memo,
   useCallback,
@@ -40,6 +40,7 @@ interface FolderProps {
   onToggle?: (open: boolean) => void;
   className?: string;
   children: ReactNode;
+  disable?: boolean;
 }
 
 interface FileProps {
@@ -52,7 +53,7 @@ interface FileProps {
 function Tree({ children }: { children: ReactNode }): ReactElement {
   return (
     <div className={cn("nextra-filetree !mt-0 w-full select-none text-sm")}>
-      <div className="block rounded-lg">{children}</div>
+      <div className="block space-y-1 rounded-lg">{children}</div>
     </div>
   );
 }
@@ -79,6 +80,7 @@ const Folder = memo<FolderProps>(
     defaultOpen = false,
     onToggle,
     className,
+    disable,
   }) => {
     const indent = useIndent();
     const [isOpen, setIsOpen] = useState(defaultOpen || childActive);
@@ -106,16 +108,23 @@ const Folder = memo<FolderProps>(
     );
 
     const isFolderOpen = open === undefined ? isOpen : open;
+    const hasChildren = React.Children.count(children) > 0;
 
     return (
-      <li className="flex w-full list-none flex-col">
+      <li
+        className={cn(
+          "flex w-full list-none flex-col",
+          hasChildren && "space-y-1",
+        )}
+      >
         <div
           title={name}
           className={cn(
-            "inline-flex w-full cursor-pointer items-center",
+            "inline-flex w-full cursor-pointer items-center overflow-hidden",
             "rounded-md text-foreground duration-100 hover:bg-gray-100 hover:dark:bg-muted",
             "px-3 py-1.5 leading-6",
             active && "bg-gray-100 font-semibold dark:bg-muted",
+            disable && "pointer-events-none cursor-auto opacity-50",
             className,
           )}
           onClick={handleFolderClick}
@@ -138,7 +147,10 @@ const Folder = memo<FolderProps>(
             <FolderIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
           )}
           <span
-            className="ml-2 w-fit truncate"
+            className="ml-2 truncate whitespace-nowrap"
+            style={{
+              maxWidth: `${Math.max(150, 300 - indent * 30)}px`,
+            }}
             title={(label ?? name) as string}
           >
             {label ?? name}
@@ -156,6 +168,7 @@ const Folder = memo<FolderProps>(
 Folder.displayName = "Folder";
 
 const File = memo<FileProps>(({ label, name, active, onToggle }) => {
+  const indent = useIndent();
   const toggle = useCallback(() => {
     onToggle?.(!active);
   }, [onToggle]);
@@ -170,12 +183,18 @@ const File = memo<FileProps>(({ label, name, active, onToggle }) => {
       )}
     >
       <span
-        className="ml-5 inline-flex cursor-default items-center"
+        className="ml-5 inline-flex w-full cursor-default items-center overflow-hidden"
         onClick={toggle}
       >
         <Ident />
         <FileIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
-        <span className="ml-2 w-fit truncate" title={(label ?? name) as string}>
+        <span
+          className="ml-2 truncate whitespace-nowrap"
+          style={{
+            maxWidth: `${Math.max(150, 280 - indent * 30)}px`,
+          }}
+          title={(label ?? name) as string}
+        >
           {label ?? name}
         </span>
       </span>

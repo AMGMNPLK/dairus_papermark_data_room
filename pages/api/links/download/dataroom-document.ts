@@ -1,13 +1,16 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
 import { ItemType, ViewType } from "@prisma/client";
+import { waitUntil } from "@vercel/functions";
 
 import { getFile } from "@/lib/files/get-file";
+import { notifyDocumentDownload } from "@/lib/integrations/slack/events";
 import prisma from "@/lib/prisma";
+import { getFileNameWithPdfExtension } from "@/lib/utils";
 import { getIpAddress } from "@/lib/utils/ip";
 
 export const config = {
-  maxDuration: 180,
+  maxDuration: 300,
 };
 
 export default async function handle(
@@ -15,7 +18,7 @@ export default async function handle(
   res: NextApiResponse,
 ) {
   if (req.method === "POST") {
-    // POST /api/links/download/dataroomDocumet
+    // POST /api/links/download/dataroom-document
     const { linkId, viewId, documentId } = req.body as {
       linkId: string;
       viewId: string;
@@ -30,19 +33,22 @@ export default async function handle(
           viewType: { equals: ViewType.DATAROOM_VIEW },
         },
         select: {
+          id: true,
+          viewedAt: true,
+          viewerEmail: true,
           viewerId: true,
           verified: true,
-          id: true,
-          viewerEmail: true,
-          viewedAt: true,
           link: {
             select: {
-              enableWatermark: true,
               allowDownload: true,
               expiresAt: true,
+              isArchived: true,
+              deletedAt: true,
+              enableWatermark: true,
               watermarkConfig: true,
               name: true,
-              isArchived: true,
+              permissionGroupId: true,
+              teamId: true,
             },
           },
           groupId: true,
@@ -50,17 +56,17 @@ export default async function handle(
             select: {
               id: true,
               documents: {
-                where: {
-                  documentId: documentId,
-                },
+                where: { document: { id: documentId } },
                 select: {
                   id: true,
                   document: {
                     select: {
+                      id: true,
                       name: true,
                       versions: {
                         where: { isPrimary: true },
                         select: {
+                          id: true,
                           type: true,
                           file: true,
                           storageType: true,
@@ -94,6 +100,11 @@ export default async function handle(
         return res.status(403).json({ error: "Error downloading" });
       }
 
+      // if link is deleted, we should not allow the download
+      if (view.link.deletedAt) {
+        return res.status(403).json({ error: "Error downloading" });
+      }
+
       // if link is expired, we should not allow the download
       if (view.link.expiresAt && view.link.expiresAt < new Date()) {
         return res.status(403).json({ error: "Error downloading" });
@@ -114,14 +125,27 @@ export default async function handle(
 
       let downloadDocuments = view.dataroom.documents;
 
-      // if groupId is not null,
-      // we should find the group permissions
-      // and reduce the number of documents and folders to download
-      if (view.groupId) {
-        const groupPermissions =
-          await prisma.viewerGroupAccessControls.findMany({
+      // Check permissions based on groupId (ViewerGroup) or permissionGroupId (PermissionGroup)
+      const effectiveGroupId = view.groupId || view.link.permissionGroupId;
+
+      if (effectiveGroupId) {
+        let groupPermissions: any[] = [];
+
+        if (view.groupId) {
+          // This is a ViewerGroup (legacy behavior)
+          groupPermissions = await prisma.viewerGroupAccessControls.findMany({
             where: { groupId: view.groupId, canDownload: true },
           });
+        } else if (view.link.permissionGroupId) {
+          // This is a PermissionGroup (new behavior)
+          groupPermissions =
+            await prisma.permissionGroupAccessControls.findMany({
+              where: {
+                groupId: view.link.permissionGroupId,
+                canDownload: true,
+              },
+            });
+        }
 
         const permittedDocumentIds = groupPermissions
           .filter(
@@ -145,10 +169,26 @@ export default async function handle(
           dataroomViewId: view.id,
           viewerEmail: view.viewerEmail,
           downloadedAt: new Date(),
+          downloadType: "SINGLE",
           viewerId: view.viewerId,
           verified: view.verified,
         },
       });
+
+      if (view.link.teamId) {
+        waitUntil(
+          notifyDocumentDownload({
+            teamId: view.link.teamId,
+            documentId,
+            dataroomId: view.dataroom.id,
+            linkId,
+            viewerEmail: view.viewerEmail ?? undefined,
+            viewerId: view.viewerId ?? undefined,
+          }),
+        );
+      } else {
+        console.log("No teamId found, skipping Slack notification");
+      }
 
       const file =
         view.link.enableWatermark &&
@@ -166,7 +206,8 @@ export default async function handle(
       // For PDF files with watermark, always buffer and process
       if (
         downloadDocuments[0].document!.versions[0].type === "pdf" &&
-        view.link.enableWatermark
+        view.link.enableWatermark &&
+        view.link.watermarkConfig
       ) {
         const response = await fetch(
           `${process.env.NEXTAUTH_URL}/api/mupdf/annotate-document`,
@@ -174,17 +215,25 @@ export default async function handle(
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.INTERNAL_API_KEY}`,
             },
             body: JSON.stringify({
               url: downloadUrl,
               numPages: downloadDocuments[0].document!.versions[0].numPages,
               watermarkConfig: view.link.watermarkConfig,
+              originalFileName: downloadDocuments[0].document!.name,
               viewerData: {
                 email: view.viewerEmail,
-                date: new Date(view.viewedAt).toLocaleDateString(),
+                date: (view.viewedAt
+                  ? new Date(view.viewedAt)
+                  : new Date()
+                ).toLocaleDateString(),
                 ipAddress: getIpAddress(req.headers),
                 link: view.link.name,
-                time: new Date(view.viewedAt).toLocaleTimeString(),
+                time: (view.viewedAt
+                  ? new Date(view.viewedAt)
+                  : new Date()
+                ).toLocaleTimeString(),
               },
             }),
           },
@@ -200,7 +249,7 @@ export default async function handle(
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
           "Content-Disposition",
-          `attachment; filename="${encodeURIComponent(downloadDocuments[0].document!.name)}"`,
+          `attachment; filename="${encodeURIComponent(getFileNameWithPdfExtension(downloadDocuments[0].document!.name))}"`,
         );
         res.setHeader("Content-Length", Buffer.from(pdfBuffer).length);
 

@@ -1,18 +1,18 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
+import { isTeamPausedById } from "@/ee/features/billing/cancellation/lib/is-team-paused";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import { DocumentStorageType } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
 
 import { copyFileToBucketServer } from "@/lib/files/copy-file-to-bucket-server";
 import prisma from "@/lib/prisma";
-import { getTeamWithUsersAndDocument } from "@/lib/team/helper";
 import { convertFilesToPdfTask } from "@/lib/trigger/convert-files";
 import { processVideo } from "@/lib/trigger/optimize-video-files";
 import { convertPdfToImageRoute } from "@/lib/trigger/pdf-to-image-route";
 import { CustomUser } from "@/lib/types";
 import { log } from "@/lib/utils";
 import { conversionQueue } from "@/lib/utils/trigger-utils";
+import { documentUploadSchema } from "@/lib/zod/url-validation";
 
 export default async function handle(
   req: NextApiRequest,
@@ -30,36 +30,75 @@ export default async function handle(
       teamId: string;
       id: string;
     };
+    // Validate request body using Zod schema for security
+    const validationResult = await documentUploadSchema.safeParseAsync({
+      ...req.body,
+      name: `Version ${new Date().toISOString()}`, // Dummy name for validation
+    });
+
+    if (!validationResult.success) {
+      log({
+        message: `Document version validation failed for documentId: ${documentId}, teamId: ${teamId}. Errors: ${JSON.stringify(validationResult.error.errors)}`,
+        type: "error",
+      });
+      return res.status(400).json({
+        error: "Invalid document version data",
+        details: validationResult.error.errors,
+      });
+    }
+
     const { url, type, numPages, storageType, contentType, fileSize } =
-      req.body as {
-        url: string;
-        type: string;
-        numPages: number;
-        storageType: DocumentStorageType;
-        contentType: string;
-        fileSize: number | undefined;
-      };
+      validationResult.data;
 
     const userId = (session.user as CustomUser).id;
 
     try {
-      const { team, document } = await getTeamWithUsersAndDocument({
-        teamId,
-        userId,
-        docId: documentId,
-        checkOwner: true,
-        options: {
-          select: {
-            id: true,
-            advancedExcelEnabled: true,
-            versions: {
-              orderBy: { createdAt: "desc" },
-              take: 1,
-              select: { versionNumber: true },
+      const team = await prisma.team.findUnique({
+        where: {
+          id: teamId,
+          users: {
+            some: {
+              userId,
             },
           },
         },
+        select: {
+          plan: true,
+        },
       });
+
+      if (!team) {
+        return res.status(401).end("Unauthorized");
+      }
+
+      // Check if team is paused
+      const teamIsPaused = await isTeamPausedById(teamId);
+      if (teamIsPaused) {
+        return res.status(403).json({
+          error:
+            "Team is currently paused. New document uploads are not available.",
+        });
+      }
+
+      const document = await prisma.document.findUnique({
+        where: {
+          id: documentId,
+          teamId,
+        },
+        select: {
+          id: true,
+          advancedExcelEnabled: true,
+          versions: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { versionNumber: true },
+          },
+        },
+      });
+
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
 
       // create a new document version
       const currentVersionNumber = document?.versions
@@ -122,7 +161,11 @@ export default async function handle(
         );
       }
 
-      if (type === "video") {
+      if (
+        type === "video" &&
+        contentType !== "video/mp4" &&
+        contentType?.startsWith("video/")
+      ) {
         await processVideo.trigger(
           {
             videoUrl: url,
@@ -172,6 +215,7 @@ export default async function handle(
         await copyFileToBucketServer({
           filePath: version.file,
           storageType: version.storageType,
+          teamId,
         });
       }
 

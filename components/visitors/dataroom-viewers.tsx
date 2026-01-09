@@ -6,6 +6,9 @@ import {
   SendIcon,
 } from "lucide-react";
 
+import { useDataroomViewers } from "@/lib/swr/use-dataroom";
+import { timeAgo } from "@/lib/utils";
+
 import ChevronDown from "@/components/shared/icons/chevron-down";
 import {
   Collapsible,
@@ -21,10 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TimestampTooltip } from "@/components/ui/timestamp-tooltip";
 import { BadgeTooltip } from "@/components/ui/tooltip";
-
-import { useDataroomViewers } from "@/lib/swr/use-dataroom";
-import { timeAgo } from "@/lib/utils";
 
 import DataroomVisitHistory from "./dataroom-visitors-history";
 import { VisitorAvatar } from "./visitor-avatar";
@@ -76,11 +77,11 @@ export default function DataroomViewersTable({
                               <p className="flex items-center gap-x-2 overflow-visible text-sm font-medium text-gray-800 dark:text-gray-200">
                                 {viewer.email ? (
                                   <>
-                                    {viewer.email}{" "}
+                                    {(viewer as any).viewerName || viewer.email}{" "}
                                     {viewer.verified && (
                                       <BadgeTooltip
                                         content="Verified visitor"
-                                        key="verified"
+                                        key={`verified-${viewer.id}`}
                                       >
                                         <BadgeCheckIcon className="h-4 w-4 text-emerald-500 hover:text-emerald-600" />
                                       </BadgeTooltip>
@@ -88,7 +89,7 @@ export default function DataroomViewersTable({
                                     {viewer.internal && (
                                       <BadgeTooltip
                                         content="Internal visitor"
-                                        key="internal"
+                                        key={`internal-${viewer.id}`}
                                       >
                                         <BadgeInfoIcon className="h-4 w-4 text-blue-500 hover:text-blue-600" />
                                       </BadgeTooltip>
@@ -96,7 +97,7 @@ export default function DataroomViewersTable({
                                     {viewer.invitedAt && (
                                       <BadgeTooltip
                                         content={`Invited ${timeAgo(viewer.invitedAt)}`}
-                                        key="invited"
+                                        key={`invited-${viewer.id}`}
                                       >
                                         <SendIcon className="h-4 w-4 text-sky-500 hover:text-sky-600" />
                                       </BadgeTooltip>
@@ -106,6 +107,11 @@ export default function DataroomViewersTable({
                                   "Anonymous"
                                 )}
                               </p>
+                              {(viewer as any).viewerName && viewer.email && (
+                                <p className="text-xs text-muted-foreground/60">
+                                  {viewer.email}
+                                </p>
+                              )}
                               <p className="text-xs text-muted-foreground/60 sm:text-sm">
                                 {/* {view.link.name ? view.link.name : view.linkId} */}
                               </p>
@@ -131,13 +137,24 @@ export default function DataroomViewersTable({
                       </TableCell> */}
                       {/* Last Viewed */}
                       <TableCell className="text-sm text-muted-foreground">
-                        <time
-                          dateTime={new Date(viewer.lastViewedAt).toISOString()}
-                        >
-                          {viewer.lastViewedAt
-                            ? timeAgo(viewer.lastViewedAt)
-                            : "-"}
-                        </time>
+                        {viewer.lastViewedAt ? (
+                          <TimestampTooltip
+                            timestamp={viewer.lastViewedAt}
+                            side="right"
+                            rows={["local", "utc", "unix"]}
+                          >
+                            <time
+                              className="select-none"
+                              dateTime={new Date(
+                                viewer.lastViewedAt,
+                              ).toISOString()}
+                            >
+                              {timeAgo(viewer.lastViewedAt)}
+                            </time>
+                          </TimestampTooltip>
+                        ) : (
+                          "-"
+                        )}
                       </TableCell>
                       {/* Actions */}
                       <TableCell className="cursor-pointer p-0 text-center sm:text-right">
@@ -164,25 +181,26 @@ export default function DataroomViewersTable({
                                 </TableCell>
 
                                 <TableCell>
-                                  <div>
+                                  <TimestampTooltip
+                                    timestamp={view.viewedAt}
+                                    side="right"
+                                    rows={["local", "utc", "unix"]}
+                                  >
                                     <time
-                                      className="truncate text-sm text-muted-foreground"
+                                      className="select-none truncate text-sm text-muted-foreground"
                                       dateTime={new Date(
                                         view.viewedAt,
-                                      ).toLocaleString()}
-                                      title={new Date(
-                                        view.viewedAt,
-                                      ).toLocaleString()}
+                                      ).toISOString()}
                                     >
                                       {timeAgo(view.viewedAt)}
                                     </time>
-                                  </div>
+                                  </TimestampTooltip>
                                 </TableCell>
                                 <TableCell className="table-cell"></TableCell>
                               </TableRow>
 
                               {view.downloadedAt ? (
-                                <TableRow key={view.id + 1}>
+                                <TableRow key={`download-${view.id}`}>
                                   <TableCell>
                                     <div className="flex items-center gap-x-4 overflow-visible">
                                       <DownloadCloudIcon className="h-5 w-5 text-cyan-500 hover:text-cyan-600" />
@@ -191,19 +209,20 @@ export default function DataroomViewersTable({
                                   </TableCell>
 
                                   <TableCell>
-                                    <div>
+                                    <TimestampTooltip
+                                      timestamp={view.downloadedAt}
+                                      side="right"
+                                      rows={["local", "utc", "unix"]}
+                                    >
                                       <time
-                                        className="truncate text-sm text-muted-foreground"
+                                        className="select-none truncate text-sm text-muted-foreground"
                                         dateTime={new Date(
                                           view.downloadedAt,
-                                        ).toLocaleString()}
-                                        title={new Date(
-                                          view.downloadedAt,
-                                        ).toLocaleString()}
+                                        ).toISOString()}
                                       >
                                         {timeAgo(view.downloadedAt)}
                                       </time>
-                                    </div>
+                                    </TimestampTooltip>
                                   </TableCell>
                                   <TableCell className="table-cell"></TableCell>
                                 </TableRow>

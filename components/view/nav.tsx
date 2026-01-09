@@ -1,17 +1,23 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 
+import { useViewerChatSafe } from "@/ee/features/ai/components/viewer-chat-provider";
 import { Brand, DataroomBrand } from "@prisma/client";
 import {
   ArrowUpRight,
+  BadgeInfoIcon,
   Download,
+  Maximize,
+  MessageCircle,
   Slash,
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+
+import { determineTextColor } from "@/lib/utils/determine-text-color";
 
 import {
   DropdownMenu,
@@ -29,8 +35,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { determineTextColor } from "@/lib/utils/determine-text-color";
-
 import PapermarkSparkle from "../shared/icons/papermark-sparkle";
 import {
   Breadcrumb,
@@ -41,51 +45,78 @@ import {
   BreadcrumbSeparator,
 } from "../ui/breadcrumb";
 import { Button } from "../ui/button";
-import { TDocumentData } from "./dataroom/dataroom-view";
+import { AnnotationToggle } from "./annotations/annotation-toggle";
+import { ConversationSidebar } from "./conversations/sidebar";
 import ReportForm from "./report-form";
 
-export default function Nav({
-  pageNumber,
-  numPages,
-  allowDownload,
-  assistantEnabled,
-  brand,
-  viewId,
-  linkId,
-  type,
-  embeddedLinks,
-  documentName,
-  isDataroom,
-  setDocumentData,
-  isMobile,
-  isPreview,
-  hasWatermark,
-  documentId,
-  handleZoomIn,
-  handleZoomOut,
-}: {
-  pageNumber?: number;
-  numPages?: number;
+export type TNavData = {
+  linkId: string;
+  documentId: string;
   allowDownload?: boolean;
-  assistantEnabled?: boolean;
   brand?: Partial<Brand> | Partial<DataroomBrand> | null;
-  embeddedLinks?: string[];
-  viewId?: string;
-  linkId?: string;
-  type?: "pdf" | "notion" | "sheet";
-  documentName?: string;
   isDataroom?: boolean;
-  setDocumentData?: React.Dispatch<React.SetStateAction<TDocumentData | null>>;
+  viewId?: string;
+  viewerId?: string;
   isMobile?: boolean;
   isPreview?: boolean;
+  dataroomId?: string;
+  conversationsEnabled?: boolean;
+  isTeamMember?: boolean;
+  annotationsEnabled?: boolean;
+  hasAnnotations?: boolean;
+  annotationsFeatureEnabled?: boolean;
+  onToggleAnnotations?: (enabled: boolean) => void;
+};
+
+export default function Nav({
+  navData,
+  type,
+  pageNumber,
+  numPages,
+  embeddedLinks,
+  hasWatermark,
+  handleZoomIn,
+  handleZoomOut,
+  handleFullscreen,
+}: {
+  navData: TNavData;
+  type?: "pdf" | "notion" | "sheet";
+  pageNumber?: number;
+  numPages?: number;
+  embeddedLinks?: string[];
   hasWatermark?: boolean;
-  documentId?: string;
   handleZoomIn?: () => void;
   handleZoomOut?: () => void;
+  handleFullscreen?: () => void;
 }) {
   const router = useRouter();
   const asPath = router.asPath;
   const { previewToken, preview } = router.query;
+
+  // Get chat context to adjust navbar when chat is open
+  const chatContext = useViewerChatSafe();
+  const isChatOpen = chatContext?.isOpen && chatContext?.isEnabled;
+
+  const {
+    linkId,
+    allowDownload,
+    brand,
+    isDataroom,
+    viewId,
+    viewerId,
+    isMobile,
+    isPreview,
+    documentId,
+    dataroomId,
+    conversationsEnabled,
+    isTeamMember,
+    annotationsEnabled,
+    hasAnnotations,
+    annotationsFeatureEnabled,
+    onToggleAnnotations,
+  } = navData;
+
+  const [showConversations, setShowConversations] = useState(false);
 
   // Extract the dataroom path from the URL
   // This regex captures everything before "/d/" in the path
@@ -98,7 +129,8 @@ export default function Nav({
       return;
     }
     if (!allowDownload || type === "notion") return;
-    try {
+
+    const downloadPromise = (async () => {
       const response = await fetch(`/api/links/download`, {
         method: "POST",
         headers: {
@@ -107,38 +139,105 @@ export default function Nav({
         body: JSON.stringify({ linkId, viewId }),
       });
 
-      if (hasWatermark) {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || "Failed to download file";
+        throw new Error(errorMessage);
+      }
+
+      // Check if the response is a PDF file (for watermarked PDFs)
+      const contentType = response.headers.get("content-type");
+      if (contentType === "application/pdf") {
+        // Handle direct PDF download (watermarked PDFs)
         const pdfBlob = await response.blob();
-        const blobUrl = URL.createObjectURL(pdfBlob);
+        const blobUrl = window.URL.createObjectURL(pdfBlob);
 
-        const a = document.createElement("a");
-        a.href = blobUrl;
-        a.download = "watermarked_document.pdf";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-
-        // Clean up the Blob URL
-        URL.revokeObjectURL(blobUrl);
-      } else {
-        if (!response.ok) {
-          toast.error("Error downloading file");
-          return;
+        // Extract filename from Content-Disposition header
+        const contentDisposition = response.headers.get("content-disposition");
+        let filename = "document.pdf";
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(
+            /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
+          );
+          if (filenameMatch && filenameMatch[1]) {
+            filename = decodeURIComponent(
+              filenameMatch[1].replace(/['"]/g, ""),
+            );
+          }
         }
+
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.rel = "noopener noreferrer";
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+          document.body.removeChild(link);
+        }, 100);
+      } else {
+        // Handle JSON response with downloadUrl (non-watermarked files)
         const { downloadUrl } = await response.json();
 
-        window.open(downloadUrl, "_blank");
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+
+        setTimeout(() => {
+          document.body.removeChild(link);
+        }, 100);
       }
-    } catch (error) {
-      console.error("Error downloading file:", error);
-    }
+
+      return "File downloaded successfully";
+    })();
+
+    toast.promise(downloadPromise, {
+      loading: hasWatermark
+        ? "Preparing download with watermark..."
+        : "Preparing download...",
+      success: (message) => message,
+      error: (err) => err.message || "Failed to download file",
+    });
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle conversations with 'c' key
+      if (
+        e.key === "c" &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        isDataroom &&
+        conversationsEnabled &&
+        !showConversations // if conversations are already open, don't toggle them
+      ) {
+        e.preventDefault();
+        setShowConversations((prev) => !prev);
+      }
+
+      if (e.key === "Escape" && showConversations) {
+        e.preventDefault();
+        setShowConversations(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDataroom, conversationsEnabled, showConversations]);
 
   return (
     <nav
       className="bg-black"
       style={{
         backgroundColor: brand && brand.brandColor ? brand.brandColor : "black",
+        // Extend navbar to full width when chat panel is open (counteract parent padding)
+        marginRight: isChatOpen ? "-400px" : undefined,
+        // paddingRight: isChatOpen ? "400px" : undefined,
       }}
     >
       <div className="mx-auto px-2 sm:px-6 lg:px-8">
@@ -164,9 +263,8 @@ export default function Nav({
                 </Link>
               )}
             </div>
-            <div id="view-breadcrump-portal"></div>
             {isDataroom ? (
-              <Breadcrumb>
+              <Breadcrumb className="ml-6">
                 <BreadcrumbList>
                   <BreadcrumbItem>
                     <BreadcrumbLink
@@ -179,24 +277,62 @@ export default function Nav({
                       Home
                     </BreadcrumbLink>
                   </BreadcrumbItem>
-                  {/* <BreadcrumbSeparator>
-                    <Slash />
-                  </BreadcrumbSeparator>
-                  <BreadcrumbItem>
-                    <BreadcrumbPage
-                      className="font-medium"
-                      style={{
-                        color: determineTextColor(brand?.brandColor),
-                      }}
-                    >
-                      {documentName ?? "Document"}
-                    </BreadcrumbPage>
-                  </BreadcrumbItem> */}
+                  {type === "notion" ? (
+                    <>
+                      <BreadcrumbSeparator>
+                        <Slash />
+                      </BreadcrumbSeparator>
+                      <div id="view-breadcrump-portal"></div>
+                    </>
+                  ) : null}
+                </BreadcrumbList>
+              </Breadcrumb>
+            ) : type === "notion" ? (
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <div id="view-breadcrump-portal"></div>
                 </BreadcrumbList>
               </Breadcrumb>
             ) : null}
           </div>
           <div className="absolute inset-y-0 right-0 flex items-center space-x-2 pr-2 sm:static sm:inset-auto sm:ml-6 sm:space-x-4 sm:pr-0">
+            {isTeamMember && (
+              <TooltipProvider delayDuration={100}>
+                <Tooltip defaultOpen>
+                  <TooltipTrigger asChild>
+                    <Button
+                      className="size-8 bg-gray-900 text-white hover:bg-gray-900/80 sm:size-10"
+                      size="icon"
+                    >
+                      <BadgeInfoIcon className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs text-wrap text-center">
+                      Skipped verification because you are a team member; no
+                      analytics will be collected
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {/* Conversation toggle button for dataroom documents */}
+            {isDataroom && conversationsEnabled && (
+              <Button
+                onClick={() => setShowConversations(!showConversations)}
+                className="bg-gray-900 text-white hover:bg-gray-900/80"
+              >
+                View FAQ
+              </Button>
+            )}
+            {/* Annotations toggle button */}
+            {onToggleAnnotations && annotationsFeatureEnabled && (
+              <AnnotationToggle
+                enabled={annotationsEnabled || false}
+                onToggle={onToggleAnnotations}
+                hasAnnotations={hasAnnotations}
+              />
+            )}
             {embeddedLinks && embeddedLinks.length > 0 ? (
               <DropdownMenu>
                 <DropdownMenuTrigger>
@@ -227,21 +363,7 @@ export default function Nav({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
-            {assistantEnabled ? (
-              <Link href={`/view/${linkId}/chat`}>
-                <Button
-                  className="m-1 bg-gray-900 text-white hover:bg-gray-900/80"
-                  variant={"special"}
-                  size={"icon"}
-                  style={{
-                    backgroundSize: "200% auto",
-                  }}
-                  title="Open AI Document Assistant"
-                >
-                  <PapermarkSparkle className="h-5 w-5" />
-                </Button>
-              </Link>
-            ) : null}
+
             {allowDownload ? (
               <Button
                 onClick={downloadFile}
@@ -294,6 +416,28 @@ export default function Nav({
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
+
+                {handleFullscreen && (
+                  <TooltipProvider delayDuration={50}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={handleFullscreen}
+                          className="bg-gray-900 text-white hover:bg-gray-900/80"
+                          size="icon"
+                        >
+                          <Maximize className="h-5 w-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <span className="mr-2 text-xs">Fullscreen</span>
+                        <span className="ml-auto rounded-sm border bg-muted p-0.5 text-xs tracking-widest text-muted-foreground">
+                          F
+                        </span>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </div>
             )}
 
@@ -321,6 +465,19 @@ export default function Nav({
           </div>
         </div>
       </div>
+      {isDataroom && conversationsEnabled && showConversations ? (
+        <ConversationSidebar
+          dataroomId={dataroomId}
+          documentId={documentId}
+          pageNumber={pageNumber}
+          viewId={viewId || ""}
+          viewerId={viewerId}
+          linkId={linkId!}
+          isEnabled={true}
+          isOpen={showConversations}
+          onOpenChange={setShowConversations}
+        />
+      ) : null}
     </nav>
   );
 }

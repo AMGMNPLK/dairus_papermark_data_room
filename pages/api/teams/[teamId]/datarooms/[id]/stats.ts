@@ -10,6 +10,10 @@ import { CustomUser } from "@/lib/types";
 
 import { authOptions } from "../../../../auth/[...nextauth]";
 
+export const config = {
+  maxDuration: 120,
+};
+
 export default async function handle(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -80,7 +84,7 @@ export default async function handle(
           views: [],
           duration: { data: [] },
           total_duration: 0,
-          groupedReactions: [],
+          avgCompletionRate: 0,
         });
       }
 

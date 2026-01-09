@@ -8,12 +8,22 @@ import { TeamContextType } from "@/context/team-context";
 import {
   ArchiveXIcon,
   BetweenHorizontalStartIcon,
+  FileSlidersIcon,
   FolderInputIcon,
   MoreVertical,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { mutate } from "swr";
+
+import { type DataroomFolderDocument } from "@/lib/swr/use-dataroom";
+import { type DocumentWithLinksAndLinkCountAndViewCount } from "@/lib/types";
+import { cn, nFormatter, timeAgo } from "@/lib/utils";
+import { fileIcon } from "@/lib/utils/get-file-icon";
+import {
+  HIERARCHICAL_DISPLAY_STYLE,
+  useHierarchicalDisplayName,
+} from "@/lib/utils/hierarchical-display";
 
 import BarChart from "@/components/shared/icons/bar-chart";
 import { Button } from "@/components/ui/button";
@@ -26,13 +36,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { type DataroomFolderDocument } from "@/lib/swr/use-dataroom";
-import { type DocumentWithLinksAndLinkCountAndViewCount } from "@/lib/types";
-import { cn, nFormatter, timeAgo } from "@/lib/utils";
-import { fileIcon } from "@/lib/utils/get-file-icon";
-
 import { AddToDataroomModal } from "../documents/add-document-to-dataroom-modal";
+import { DocumentPreviewButton } from "../documents/document-preview-button";
 import FileProcessStatusBar from "../documents/file-process-status-bar";
+import { SetUnifiedPermissionsModal } from "./groups/set-unified-permissions-modal";
 import { MoveToDataroomFolderModal } from "./move-dataroom-folder-modal";
 
 type DocumentsCardProps = {
@@ -51,10 +58,18 @@ export default function DataroomDocumentCard({
   isSelected,
   isHovered,
 }: DocumentsCardProps) {
+  const [groupPermissionOpen, setGroupPermissionOpen] =
+    useState<boolean>(false);
   const { theme, systemTheme } = useTheme();
   const isLight =
     theme === "light" || (theme === "system" && systemTheme === "light");
   const router = useRouter();
+
+  // Get hierarchical display name
+  const displayName = useHierarchicalDisplayName(
+    dataroomDocument.document.name,
+    dataroomDocument.hierarchicalIndex,
+  );
 
   const [isFirstClick, setIsFirstClick] = useState<boolean>(false);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
@@ -122,7 +137,11 @@ export default function DataroomDocumentCard({
         {
           method: "DELETE",
         },
-      ).then(() => {
+      ).then(async (res) => {
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.message || "Failed to remove document");
+        }
         mutate(
           `/api/teams/${teamInfo?.currentTeam?.id}/datarooms/${dataroomId}${endpoint}`,
           null,
@@ -140,7 +159,7 @@ export default function DataroomDocumentCard({
       {
         loading: "Removing document...",
         success: "Document removed successfully.",
-        error: "Failed to remove document. Try again.",
+        error: (err) => err.message || "Failed to remove document. Try again.",
       },
     );
   };
@@ -200,8 +219,11 @@ export default function DataroomDocumentCard({
 
             <div className="flex-col">
               <div className="flex items-center">
-                <h2 className="min-w-0 max-w-[150px] truncate text-sm font-semibold leading-6 text-foreground sm:max-w-md">
-                  {dataroomDocument.document.name}
+                <h2
+                  className="min-w-0 max-w-[150px] truncate text-sm font-semibold leading-6 text-foreground sm:max-w-md"
+                  style={HIERARCHICAL_DISPLAY_STYLE}
+                >
+                  {displayName}
                 </h2>
               </div>
               <div className="mt-1 flex items-center space-x-1 text-xs leading-5 text-muted-foreground">
@@ -212,6 +234,12 @@ export default function DataroomDocumentCard({
                   <>
                     <p>•</p>
                     <p className="truncate">{`${dataroomDocument.document._count.versions} Versions`}</p>
+                  </>
+                ) : null}
+                {dataroomDocument.document.isExternalUpload ? (
+                  <>
+                    <p>•</p>
+                    <p className="truncate">Added by external collaborator</p>
                   </>
                 ) : null}
               </div>
@@ -232,6 +260,19 @@ export default function DataroomDocumentCard({
                 <span className="ml-1 hidden sm:inline-block">views</span>
               </p>
             </Link>
+
+            <DocumentPreviewButton
+              documentId={dataroomDocument.document.id}
+              primaryVersion={{
+                hasPages:
+                  dataroomDocument.document.versions?.[0]?.hasPages || false,
+                type: dataroomDocument.document.type,
+                numPages: null, // Not available in this context
+              }}
+              variant="outline"
+              size="icon"
+              className="z-10 h-8 w-8 border-gray-200 bg-transparent hover:bg-gray-200 dark:border-gray-700 hover:dark:bg-gray-700 lg:h-9 lg:w-9"
+            />
 
             <DropdownMenu open={menuOpen} onOpenChange={handleMenuStateChange}>
               <DropdownMenuTrigger asChild>
@@ -263,6 +304,15 @@ export default function DataroomDocumentCard({
                 >
                   <BetweenHorizontalStartIcon className="mr-2 h-4 w-4" />
                   Copy to other dataroom
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setGroupPermissionOpen(true);
+                  }}
+                >
+                  <FileSlidersIcon className="mr-2 h-4 w-4" />
+                  Set Group Permissions
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
 
@@ -318,7 +368,22 @@ export default function DataroomDocumentCard({
           setOpen={setMoveFolderOpen}
           dataroomId={dataroomDocument.dataroomId}
           documentIds={[dataroomDocument.id]}
-          documentName={dataroomDocument.document.name}
+          itemName={dataroomDocument.document.name}
+          folderIds={[]}
+        />
+      ) : null}
+      {groupPermissionOpen ? (
+        <SetUnifiedPermissionsModal
+          open={groupPermissionOpen}
+          setOpen={setGroupPermissionOpen}
+          dataroomId={dataroomId}
+          uploadedFiles={[
+            {
+              documentId: dataroomDocument.id,
+              dataroomDocumentId: dataroomDocument.id,
+              fileName: dataroomDocument.document.name,
+            },
+          ]}
         />
       ) : null}
     </>
