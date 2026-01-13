@@ -15,6 +15,9 @@ export class SlackEventManager {
   async processEvent(eventData: SlackEventData): Promise<void> {
     try {
       const env = getSlackEnv();
+      if (!env) {
+        return;
+      }
 
       const integration = await prisma.installedIntegration.findUnique({
         where: {
