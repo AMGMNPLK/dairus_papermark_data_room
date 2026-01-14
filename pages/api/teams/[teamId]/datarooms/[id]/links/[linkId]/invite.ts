@@ -3,7 +3,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import handleRoute from "@/ee/features/dataroom-invitations/api/link-invite";
 
 export const config = {
-  maxDuration: 300,
+  maxDuration: 60,
 };
 
 export default async function handler(

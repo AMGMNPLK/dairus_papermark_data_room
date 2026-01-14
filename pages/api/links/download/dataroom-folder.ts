@@ -11,7 +11,7 @@ import prisma from "@/lib/prisma";
 import { getIpAddress } from "@/lib/utils/ip";
 
 export const config = {
-  maxDuration: 300,
+  maxDuration: 60,
 };
 
 export default async function handler(

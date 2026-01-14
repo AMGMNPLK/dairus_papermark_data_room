@@ -11,7 +11,7 @@ import { CustomUser } from "@/lib/types";
 import { authOptions } from "../../../../auth/[...nextauth]";
 
 export const config = {
-  maxDuration: 120,
+  maxDuration: 60,
 };
 
 export default async function handle(

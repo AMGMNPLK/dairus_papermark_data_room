@@ -31,7 +31,7 @@ function getMainDomainUrl(): string {
 
 // This function can run for a maximum of 180 seconds
 export const config = {
-  maxDuration: 180,
+  maxDuration: 60,
 };
 
 export const authOptions: NextAuthOptions = {

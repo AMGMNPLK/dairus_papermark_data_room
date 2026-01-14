@@ -9,7 +9,7 @@ import { CustomUser } from "@/lib/types";
 import { calculateAndUpdateHierarchicalIndexes } from "@/lib/utils/calculate-hierarchical-indexes";
 
 export const config = {
-  maxDuration: 300,
+  maxDuration: 60,
 };
 
 export default async function handler(

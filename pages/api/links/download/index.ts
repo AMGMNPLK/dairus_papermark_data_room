@@ -10,7 +10,7 @@ import { getIpAddress } from "@/lib/utils/ip";
 
 // This function can run for a maximum of 300 seconds
 export const config = {
-  maxDuration: 300,
+  maxDuration: 60,
 };
 
 export default async function handle(
