@@ -1,0 +1,78 @@
+// Community monthly workflow. Candidate rows and receipts are append-only.
+model MonthlyCandidate {
+  id        String   @id @default(cuid())
+  teamId    String
+  period    String
+  content   Json
+  hash      String
+  createdBy String
+  createdAt DateTime @default(now())
+  receipts  MonthlyReviewReceipt[]
+  approvals MonthlyApproval[]
+  @@index([teamId, period, createdAt])
+}
+
+// Principals must be provisioned and verified by an external, authorized process.
+// There is deliberately no registration, invitation or notification endpoint.
+model MonthlyPrincipal {
+  id             String   @id @default(cuid())
+  teamId         String
+  email          String   @unique
+  passwordHash   String
+  role           String
+  verifiedAt     DateTime?
+  revokedAt      DateTime?
+  sessionVersion Int      @default(0)
+  receipts       MonthlyReviewReceipt[]
+  @@index([teamId, role])
+}
+
+model MonthlyReviewReceipt {
+  id            String   @id @default(cuid())
+  candidateId   String
+  candidate     MonthlyCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  candidateHash String
+  principalId   String
+  principal     MonthlyPrincipal @relation(fields: [principalId], references: [id], onDelete: Restrict)
+  scope         String
+  claimId       String
+  claimHash     String
+  decision      String
+  limitations   String
+  createdAt     DateTime @default(now())
+  @@index([candidateId, claimId, scope, createdAt])
+}
+
+model MonthlyApproval {
+  id            String   @id @default(cuid())
+  candidateId   String
+  candidate     MonthlyCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  candidateHash String
+  approvedBy    String
+  receiptHash   String
+  approvedAt    DateTime @default(now())
+  @@index([candidateId])
+}
+
+// Membership is never inferred from an email or a room identifier.
+model MonthlyRoomMembership {
+  id          String   @id @default(cuid())
+  teamId      String
+  roomId      String
+  principalId String
+  revokedAt   DateTime?
+  @@unique([roomId, principalId])
+  @@index([teamId, principalId])
+}
+
+model MonthlyReviewAssignment {
+  id          String   @id @default(cuid())
+  candidateId String
+  principalId String
+  claimId     String
+  scope       String
+  createdBy   String
+  createdAt   DateTime @default(now())
+  @@unique([candidateId, principalId, claimId, scope])
+  @@index([principalId, candidateId])
+}

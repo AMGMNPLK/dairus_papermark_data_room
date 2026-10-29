@@ -41,6 +41,23 @@ export const authOptions: NextAuthOptions = {
         }
       },
     }),
+    CredentialsProvider({
+      id: "monthly-principal",
+      name: "Monthly reviewer access",
+      credentials: { email: { label: "Email", type: "email" }, password: { label: "Password", type: "password" } },
+      async authorize(credentials, req) {
+        const email = credentials?.email?.trim().toLowerCase();
+        const password = credentials?.password;
+        if (!email || email.length > 320 || !password || password.length > 256) return null;
+        try {
+          const ip = String(req.headers?.["x-real-ip"] || "private");
+          if (!(await ratelimit(10, "1 m").limit(`monthly-login:${ip}`)).success) return null;
+          const principal = await prisma.monthlyPrincipal.findUnique({ where: { email } });
+          if (!principal || !principal.verifiedAt || principal.revokedAt || !["finance", "legal", "investor"].includes(principal.role) || !(await bcrypt.compare(password, principal.passwordHash))) return null;
+          return { id: `monthly:${principal.id}:${principal.sessionVersion}`, email: principal.email, name: null };
+        } catch { return null; }
+      },
+    }),
   ],
   callbacks: {
     async jwt({ token, user, trigger }) {

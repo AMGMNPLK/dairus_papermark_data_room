@@ -1,0 +1,14 @@
+CREATE TABLE "MonthlyCandidate" ("id" TEXT NOT NULL PRIMARY KEY, "teamId" TEXT NOT NULL, "period" TEXT NOT NULL, "content" JSONB NOT NULL, "hash" TEXT NOT NULL, "createdBy" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "MonthlyCandidate_teamId_period_createdAt_idx" ON "MonthlyCandidate"("teamId", "period", "createdAt");
+CREATE TABLE "MonthlyPrincipal" ("id" TEXT NOT NULL PRIMARY KEY, "teamId" TEXT NOT NULL, "email" TEXT NOT NULL UNIQUE, "passwordHash" TEXT NOT NULL, "role" TEXT NOT NULL, "verifiedAt" TIMESTAMP(3), "revokedAt" TIMESTAMP(3), "sessionVersion" INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX "MonthlyPrincipal_teamId_role_idx" ON "MonthlyPrincipal"("teamId", "role");
+CREATE TABLE "MonthlyReviewReceipt" ("id" TEXT NOT NULL PRIMARY KEY, "candidateId" TEXT NOT NULL REFERENCES "MonthlyCandidate"("id") ON DELETE RESTRICT, "candidateHash" TEXT NOT NULL, "principalId" TEXT NOT NULL REFERENCES "MonthlyPrincipal"("id") ON DELETE RESTRICT, "scope" TEXT NOT NULL, "claimId" TEXT NOT NULL, "claimHash" TEXT NOT NULL, "decision" TEXT NOT NULL, "limitations" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "MonthlyReviewReceipt_candidateId_claimId_scope_createdAt_idx" ON "MonthlyReviewReceipt"("candidateId", "claimId", "scope", "createdAt");
+CREATE TABLE "MonthlyApproval" ("id" TEXT NOT NULL PRIMARY KEY, "candidateId" TEXT NOT NULL REFERENCES "MonthlyCandidate"("id") ON DELETE RESTRICT, "candidateHash" TEXT NOT NULL, "approvedBy" TEXT NOT NULL, "receiptHash" TEXT NOT NULL, "approvedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "MonthlyApproval_candidateId_idx" ON "MonthlyApproval"("candidateId");
+CREATE TABLE "MonthlyRoomMembership" ("id" TEXT NOT NULL PRIMARY KEY, "teamId" TEXT NOT NULL, "roomId" TEXT NOT NULL, "principalId" TEXT NOT NULL, "revokedAt" TIMESTAMP(3));
+CREATE UNIQUE INDEX "MonthlyRoomMembership_roomId_principalId_key" ON "MonthlyRoomMembership"("roomId", "principalId");
+CREATE INDEX "MonthlyRoomMembership_teamId_principalId_idx" ON "MonthlyRoomMembership"("teamId", "principalId");
+CREATE TABLE "MonthlyReviewAssignment" ("id" TEXT NOT NULL PRIMARY KEY, "candidateId" TEXT NOT NULL, "principalId" TEXT NOT NULL, "claimId" TEXT NOT NULL, "scope" TEXT NOT NULL, "createdBy" TEXT NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "MonthlyReviewAssignment_candidateId_principalId_claimId_scope_key" ON "MonthlyReviewAssignment"("candidateId", "principalId", "claimId", "scope");
+CREATE INDEX "MonthlyReviewAssignment_principalId_candidateId_idx" ON "MonthlyReviewAssignment"("principalId", "candidateId");
