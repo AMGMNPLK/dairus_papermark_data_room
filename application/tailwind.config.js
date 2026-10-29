@@ -2,13 +2,16 @@
 
 module.exports = {
   darkMode: ["class"],
-  content: [
-    "./pages/**/*.{ts,tsx}",
-    "../components/**/*.{ts,tsx}",
-    "./app/**/*.{ts,tsx}",
-    "./src/**/*.{ts,tsx}",
-    "./node_modules/@tremor/**/*.{js,ts,jsx,tsx}", // TREMOR
-  ],
+  content: {
+    relative: true,
+    files: [
+      "./pages/**/*.{ts,tsx}",
+      "../components/**/*.{ts,tsx}",
+      "./app/**/*.{ts,tsx}",
+      "./src/**/*.{ts,tsx}",
+      "../node_modules/@tremor/**/*.{js,ts,jsx,tsx}", // TREMOR
+    ],
+  },
   theme: {
     container: {
       center: "true",
