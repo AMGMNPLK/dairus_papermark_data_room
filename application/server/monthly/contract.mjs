@@ -32,16 +32,16 @@ export function approvalGaps(candidate, receipts) {
   const gaps=[];
   if (!candidate.claims.length) gaps.push('No claims to review');
   if (candidate.gaps.length) gaps.push('Source gaps require resolution or an authenticated disposition');
-  gaps.push('Evidence bytes and specialist scope assignment require independent verification before approval');
+  gaps.push('Evidence provenance, source authenticity and reviewer authority require independent verification before approval');
   if (candidate.report !== candidate.claims.map(c => c.text).join('\n\n')) gaps.push('Report must contain exactly the reviewed claim text in order');
   if (!candidate.audience.investorIds.length) gaps.push('No audience selected');
   if (Date.parse(candidate.visibility.expiresAt) <= Date.now()) gaps.push('Visibility has expired');
   for (const c of candidate.claims) {
     if (!c.evidence.length) gaps.push(`Claim ${c.id} lacks evidence`);
-    for (const scope of c.review) {
+    for (const scope of ['finance', 'legal']) {
       // Latest receipt for a claim/scope controls: a later rejection cannot be masked.
       const relevant=receipts.filter(r => r.claimId===c.id && r.scope===scope && r.claimHash===digest(c)).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-      if (!relevant.length || relevant[0].decision !== 'approved') gaps.push(`Claim ${c.id} needs ${scope} review`);
+      if (!relevant.length || !['approved', 'not_applicable'].includes(relevant[0].decision)) gaps.push(`Claim ${c.id} needs ${scope} review`);
     }
   }
   return gaps;

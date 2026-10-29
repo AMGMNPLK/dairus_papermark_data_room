@@ -16,7 +16,7 @@ test('each applicable specialty must approve the exact claim and later rejection
  const c=sample(), claimHash=digest(c.claims[0]);
  const receipt=(scope,decision,date,hash=claimHash)=>({scope,decision,claimHash:hash,claimId:'c1',createdAt:date});
  const finance=receipt('finance','approved','2030-05-01T00:00:00Z'), legal=receipt('legal','approved','2030-05-01T00:00:00Z');
- assert.ok(approvalGaps(c,[]).length);assert.ok(approvalGaps(c,[finance]).length);assert.deepEqual(approvalGaps(c,[finance,legal]),['Evidence bytes and specialist scope assignment require independent verification before approval']);
+ assert.ok(approvalGaps(c,[]).length);assert.ok(approvalGaps(c,[finance]).length);assert.deepEqual(approvalGaps(c,[finance,legal]),['Evidence provenance, source authenticity and reviewer authority require independent verification before approval']);
  assert.ok(approvalGaps(c,[finance,legal,receipt('legal','rejected','2030-05-02T00:00:00Z')]).length);
  c.claims[0].text='Changed';assert.ok(approvalGaps(c,[finance,legal]).length);
 });
@@ -30,3 +30,10 @@ test('video requires all exact provenance hashes',()=>{
 test('free-form report cannot bypass claim review',()=>{ const c=sample(); c.report += '\n\nUnreviewed statement'; assert.ok(approvalGaps(c,[]).some(x=>x.includes('exactly'))); });
 
 test('declared source gaps remain blockers even after receipts',()=>{ const c=sample(); c.gaps=['Finance query failed']; assert.ok(approvalGaps(c,[]).some(x=>x.includes('Source gaps'))); });
+test('founder-selected scopes cannot replace both specialist adjudications',()=>{
+ const c=sample();c.claims[0].review=[];
+ const hash=digest(c.claims[0]);
+ const receipts=['finance','legal'].map(scope=>({scope,decision:'not_applicable',claimHash:hash,claimId:'c1',createdAt:'2030-05-01T00:00:00Z'}));
+ assert.ok(approvalGaps(c,[receipts[0]]).some(x=>x.includes('legal')));
+ assert.deepEqual(approvalGaps(c,receipts),['Evidence provenance, source authenticity and reviewer authority require independent verification before approval']);
+});

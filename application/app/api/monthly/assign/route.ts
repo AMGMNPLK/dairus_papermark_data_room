@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       if (latest?.id !== candidate.id || digest(candidate.content) !== candidate.hash) throw new HttpError(409, "Candidate changed");
       const reviewer = await tx.monthlyPrincipal.findFirst({ where: { id: body.principalId, teamId: founder.teamId, verifiedAt: { not: null }, revokedAt: null, role: { in: ["finance", "legal"] } } });
       const claim = (candidate.content as any).claims.find((c: any) => c.id === body.claimId);
-      if (!reviewer || !claim || !claim.review.includes(reviewer.role)) throw new HttpError(404, "Reviewer or claim unavailable for this scope");
+      if (!reviewer || !claim) throw new HttpError(404, "Reviewer or claim unavailable for this scope");
       return tx.monthlyReviewAssignment.upsert({ where: { candidateId_principalId_claimId_scope: { candidateId: candidate.id, principalId: reviewer.id, claimId: claim.id, scope: reviewer.role } }, create: { candidateId: candidate.id, principalId: reviewer.id, claimId: claim.id, scope: reviewer.role, createdBy: founder.id }, update: {} });
     });
     return Response.json({ assignment }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
