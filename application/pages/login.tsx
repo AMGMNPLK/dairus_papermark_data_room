@@ -49,7 +49,7 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={login} className="space-y-4">
+            <form method="post" action="/login" onSubmit={login} className="space-y-4">
               <Label htmlFor="password">Owner password</Label>
               <Input
                 id="password"
