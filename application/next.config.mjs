@@ -13,6 +13,7 @@ const config = {
     ],
   },
   async headers() {
+    const syntheticDev = process.env.NODE_ENV === "development" && process.env.PAPERMARK_CLOUD_SYNTHETIC_ONLY === "true";
     return [
       {
         source: "/:path*",
@@ -28,7 +29,7 @@ const config = {
           {
             key: "Content-Security-Policy",
             value:
-              "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
+              `default-src 'self'; script-src 'self' 'unsafe-inline'${syntheticDev ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'`,
           },
         ],
       },
