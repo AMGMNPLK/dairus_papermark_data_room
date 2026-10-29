@@ -49,7 +49,12 @@ def packet(video, script, timeline_path, captions, provenance, output):
     timeline = json.loads(timeline_path.read_text())
     captions_match(timeline, captions.read_text())
     script_text = script.read_text()
-    if any(beat['title'] not in script_text for beat in timeline['beats']):
+    if script.suffix == '.json':
+        source_titles = [beat['text'] for beat in json.loads(script_text)['beats']]
+        matches = source_titles == [beat['title'] for beat in timeline['beats']]
+    else:
+        matches = all(beat['title'] in script_text for beat in timeline['beats'])
+    if not matches:
         raise ValueError('transcript lacks timeline text')
     probe = json.loads(checked_run(['ffprobe', '-v', 'error', '-of', 'json',
         '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate,sample_rate,channels,pix_fmt', str(video)]).stdout)
