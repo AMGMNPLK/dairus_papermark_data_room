@@ -270,7 +270,7 @@ export default function MonthlyPage() {
               </Badge>
               <Badge variant="secondary">
                 {approved
-                  ? "Founder approved exact version"
+                  ? "Historical founder approval recorded"
                   : "Founder approval pending"}
               </Badge>
               {dirty && (
@@ -782,6 +782,12 @@ export default function MonthlyPage() {
                       audience and visibility before approving. Any change
                       creates a new candidate and requires review again.
                     </p>
+                    <p>
+                      Approval is unavailable until source evidence bytes can be
+                      verified and specialist review scope can be adjudicated. A
+                      historical approval record does not grant access or
+                      authorize publication.
+                    </p>
                     {candidate ? (
                       <>
                         <p>Candidate hash</p>
@@ -790,13 +796,10 @@ export default function MonthlyPage() {
                         </code>
                         <p>
                           {approved
-                            ? `Approved ${data.approval?.approvedAt}`
+                            ? `Historical approval recorded ${data.approval?.approvedAt}`
                             : "Approval pending"}
                         </p>
-                        <Button
-                          disabled={busy || dirty || approved}
-                          onClick={() => void approve()}
-                        >
+                        <Button disabled onClick={() => void approve()}>
                           I reviewed and approve this exact candidate
                         </Button>
                       </>
