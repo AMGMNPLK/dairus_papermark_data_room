@@ -3,6 +3,7 @@ import { getTeamS3ClientAndConfig } from "@/lib/files/aws-client";
 import prisma from "@/lib/prisma";
 import { HttpError, ownedVersion, owner, readLimited, renderState, safe, sha256 } from "../../../../server/core";
 import { approvalGaps, digest } from "../../../../server/monthly/contract.mjs";
+import { MonthlyFileSizeError, readMonthlyFileBytes } from "../../../../server/monthly/bounded-bytes.mjs";
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "private, no-store" };
@@ -36,7 +37,12 @@ export async function POST(request: Request) {
         if (!version.hasPages || state?.status !== "ready" || state.sha256 !== file.sha256 || !version.file.startsWith(`${user.teamId}/core/`)) { gaps.push(`File ${file.versionId} is not ready or its digest changed`); continue; }
         const { client, config } = await getTeamS3ClientAndConfig(user.teamId);
         const object = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: version.file }));
-        if (!object.Body || Number(object.ContentLength) > 20 * 1024 * 1024 || sha256(Buffer.from(await object.Body.transformToByteArray())) !== file.sha256) gaps.push(`File ${file.versionId} stored bytes changed`);
+        try {
+          if (sha256(await readMonthlyFileBytes(object.Body, object.ContentLength)) !== file.sha256) gaps.push(`File ${file.versionId} stored bytes changed`);
+        } catch (error) {
+          if (error instanceof MonthlyFileSizeError) gaps.push(`File ${file.versionId} is unavailable or too large`);
+          else throw error;
+        }
       }
       if (gaps.length) return { gaps };
       const receiptHash = digest(receipts.map(({ id, candidateHash, claimHash, decision, limitations }) => ({ id, candidateHash, claimHash, decision, limitations })));
