@@ -14,6 +14,7 @@ import {
   CogIcon,
   ContactIcon,
   FolderIcon,
+  MailIcon,
   HouseIcon,
   Loader,
   PauseCircleIcon,
@@ -82,12 +83,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   useEffect(() => {
     if (Cookies.get("hideProBanner") !== "pro-banner") {
-      setShowProBanner(true);
+      setShowProBanner(false);
     } else {
       setShowProBanner(false);
     }
     if (Cookies.get("hideSlackBanner") !== "slack-banner") {
-      setShowSlackBanner(true);
+      setShowSlackBanner(false);
     } else {
       setShowSlackBanner(false);
     }
@@ -122,28 +123,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           !router.pathname.includes("datarooms"),
       },
       {
+        title: "Investor updates",
+        url: "/investor-updates",
+        icon: MailIcon,
+        current: router.pathname === "/investor-updates",
+      },
+      {
         title: "All Datarooms",
         url: "/datarooms",
         icon: ServerIcon,
         current: router.pathname === "/datarooms",
-        disabled: !isBusiness && !isDatarooms && !isDataroomsPlus && !isTrial,
+        disabled: false, // Local community rooms, no commercial server modules.
         trigger: "sidebar_datarooms",
         plan: PlanEnum.Business,
         highlightItem: ["datarooms"],
         isActive:
-          router.pathname.includes("datarooms") &&
-          (isBusiness || isDatarooms || isDataroomsPlus || isTrial),
+          router.pathname.includes("datarooms"),
         items:
-          isBusiness || isDatarooms || isDataroomsPlus || isTrial
-            ? dataroomItems
-            : undefined,
+          dataroomItems,
       },
       {
         title: "Visitors",
         url: "/visitors",
         icon: ContactIcon,
         current: router.pathname.includes("visitors"),
-        disabled: isFree && !isTrial,
+        disabled: false, // Local database visitor log.
         trigger: "sidebar_visitors",
         plan: PlanEnum.Pro,
         highlightItem: ["visitors"],

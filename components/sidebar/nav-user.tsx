@@ -144,7 +144,7 @@ export function NavUser() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <ModeToggle />
-              <DropdownMenuGroup>
+              <DropdownMenuGroup><DropdownMenuItem asChild><Link href="/source">Software source</Link></DropdownMenuItem>
                 <Link href="/account/general">
                   <DropdownMenuItem>
                     <CircleUserRound />

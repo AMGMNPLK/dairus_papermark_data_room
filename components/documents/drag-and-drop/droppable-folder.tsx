@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 interface DroppableFolderProps {
   id: string;
   disabledFolder: string[];
-  children: React.ReactElement;
+  children: React.ReactElement<{isOver?:boolean}>;
   path: string;
 }
 

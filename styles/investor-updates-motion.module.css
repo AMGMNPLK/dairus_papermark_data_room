@@ -1,0 +1,46 @@
+/* Small, finite motion scoped to the private archive. Content remains readable at every frame. */
+@keyframes enter {
+  from { opacity: 0.88; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes reveal {
+  from { opacity: 0.88; }
+  to { opacity: 1; }
+}
+
+.page {
+  animation: enter 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.detail {
+  animation: enter 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.panel, .feedback {
+  animation: reveal 160ms ease-out both;
+}
+
+.timelineChoice {
+  transition: background-color 140ms ease-out, border-color 140ms ease-out,
+    box-shadow 140ms ease-out, transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Avoid sticky hover states and movement while using touch or keyboard navigation. */
+@media (hover: hover) and (pointer: fine) {
+  .timelineChoice:hover:not(:focus-visible) {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px hsl(var(--foreground) / 0.06);
+  }
+}
+
+/* Also override the inherited Radix accordion and button motion within this page. */
+@media (prefers-reduced-motion: reduce) {
+  .page, .page :global(*), .page :global(*::before), .page :global(*::after),
+  .portal, .portal :global(*), .portal :global(*::before), .portal :global(*::after) {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .timelineChoice:hover { transform: none; }
+}

@@ -62,3 +62,26 @@ lib/emails/marketing
 
 # changelog
 changelog
+# Cloud development: software and synthetic fixtures only
+**/node_modules/
+**/.next/
+**/__pycache__/
+*.pyc
+.venv/
+.cloud/
+.env.cloud.local
+.env.*.local
+development/investor-room/data/
+development/investor-room/checks/*-receipt.json
+development/investor-room/checks/*
+!development/investor-room/checks/*.py
+artifacts/
+playwright-report/
+test-results/
+
+# Keep the small, reviewed source Dockerfile; generated build output stays ignored.
+!/build/
+/build/*
+!/build/Dockerfile
+
+.cloud-*/

@@ -20,7 +20,7 @@ import {
   getFileSizeLimit,
   getFileSizeLimits,
 } from "@/lib/utils/get-file-size-limits";
-import { getPagesCount } from "@/lib/utils/get-page-number-count";
+
 
 export default function DocumentUpload({
   currentFile,
@@ -48,59 +48,10 @@ export default function DocumentUpload({
   );
 
   const { getRootProps, getInputProps } = useDropzone({
-    accept:
-      isFree && !isTrial
-        ? FREE_PLAN_ACCEPTED_FILE_TYPES
-        : FULL_PLAN_ACCEPTED_FILE_TYPES,
-    multiple: false,
-    onDropAccepted: (acceptedFiles) => {
-      if (acceptedFiles.length === 0) {
-        return;
-      }
-      const file = acceptedFiles[0];
-      const fileType = file.type;
-      const fileSizeLimitMB = getFileSizeLimit(fileType, fileSizeLimits); // in MB
-      const fileSizeLimit = fileSizeLimitMB * 1024 * 1024; // in bytes
-
-      if (file.size > fileSizeLimit) {
-        const message = `File size too big for ${fileType} (max. ${fileSizeLimitMB} MB)`;
-        if (isFree && !isTrial) {
-          toast.error(message, {
-            description: "Upgrade to a paid plan to increase the limit",
-            action: {
-              label: "Upgrade",
-              onClick: () => router.push("/settings/upgrade-holiday-offer"),
-            },
-            duration: 10000,
-          });
-        } else {
-          toast.error(message);
-        }
-        return;
-      }
-
-      if (file.type !== "application/pdf") {
-        setCurrentFile(file);
-        return;
-      }
-      file
-        .arrayBuffer()
-        .then((buffer) => {
-          getPagesCount(buffer).then((numPages) => {
-            if (numPages > fileSizeLimits.maxPages) {
-              toast.error(
-                `File has too many pages (max. ${fileSizeLimits.maxPages})`,
-              );
-            } else {
-              setCurrentFile(file);
-            }
-          });
-        })
-        .catch((error) => {
-          console.error("Error reading file:", error);
-          toast.error("Failed to read the file");
-        });
-    },
+    accept: {"application/pdf":[".pdf"]},
+    maxSize:20*1024*1024,
+    multiple:false,
+    onDropAccepted:(files)=>{if(files[0])setCurrentFile(files[0]);},
     onDropRejected: (fileRejections) => {
       const { errors, file } = fileRejections[0];
       let message;
@@ -188,11 +139,7 @@ export default function DocumentUpload({
               </span>
             </div>
             <p className="text-xs leading-5 text-gray-500">
-              {currentFile
-                ? "Replace file?"
-                : isFree && !isTrial
-                  ? `Only *.pdf, *.xls, *.xlsx, *.csv, *.tsv, *.ods, *.png, *.jpeg, *.jpg`
-                  : `Only *.pdf, *.pptx, *.docx, *.xlsx, *.xls, *.xlsm, *.csv, *.tsv, *.ods, *.ppt, *.odp, *.doc, *.odt, *.rtf, *txt, *.dwg, *.dxf, *.png, *.jpg, *.jpeg, *.mp4, *.mov, *.avi, *.webm, *.ogg`}
+              {currentFile ? "Replace file?" : "PDF · up to 20 MiB and 80 pages · stored privately"}
             </p>
           </div>
         </div>

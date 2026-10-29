@@ -468,6 +468,18 @@ export const AppBreadcrumb = () => {
       return <AnalyticsBreadcrumb />;
     }
 
+    if (path === "/investor-updates") {
+      return (
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbPage>Investor updates</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      );
+    }
+
     // Settings routes
     if (path.startsWith("/settings")) {
       return <SettingsBreadcrumb />;

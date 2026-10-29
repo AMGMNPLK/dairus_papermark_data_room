@@ -40,7 +40,7 @@ type ViewerView = {
     type: string | null;
   };
   lastViewed: Date;
-  totalDuration: number;
+  totalDuration: number | null;
   viewCount: number;
 };
 
@@ -209,7 +209,7 @@ export function ContactsDocumentsTable({
           return (
             <Button
               variant="ghost"
-              onClick={() => handleSort("totalDuration")}
+              disabled
               className={getSortClass("totalDuration")}
             >
               Time Spent
@@ -228,7 +228,7 @@ export function ContactsDocumentsTable({
 
           return (
             <div className="text-sm text-muted-foreground">
-              {durationFormat(duration)}
+              {duration == null ? "Not recorded" : durationFormat(duration)}
             </div>
           );
         },

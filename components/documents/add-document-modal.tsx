@@ -236,6 +236,7 @@ export function AddDocumentModal({
     try {
       setUploading(true);
 
+      if(currentFile.type!=="application/pdf"||currentFile.size>20*1024*1024){toast.error("Upload a PDF up to 20 MiB. Export other formats to PDF first.");setUploading(false);return;}
       let contentType = currentFile.type;
       let supportedFileType = getSupportedContentType(contentType);
 
@@ -255,7 +256,7 @@ export function AddDocumentModal({
       if (!supportedFileType) {
         setUploading(false);
         toast.error(
-          "Unsupported file format. Please upload a PDF, Powerpoint, Excel, Word or image file.",
+          "Upload a PDF up to 20 MiB. Export other formats to PDF first.",
         );
         return;
       }

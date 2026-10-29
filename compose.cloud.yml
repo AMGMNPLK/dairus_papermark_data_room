@@ -1,0 +1,75 @@
+name: papermark-cloud-synthetic
+services:
+  db:
+    restart: unless-stopped
+    stop_grace_period: 30s
+    labels:
+      resilience.drain: none
+    image: postgres@sha256:25d430274d8a31184f9435cc5b2f56aff254952065bbbcac0c51acedb5a1d1e7
+    environment:
+      POSTGRES_DB: papermark_cloud
+      POSTGRES_USER: papermark_cloud
+      POSTGRES_PASSWORD: ${PAPERMARK_CLOUD_DB_PASSWORD:?Run cloud environment generation first}
+    ports: ["127.0.0.1:15432:5432"]
+    volumes: ["cloud-postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U papermark_cloud -d papermark_cloud"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 100
+  redis:
+    restart: unless-stopped
+    stop_grace_period: 30s
+    labels:
+      resilience.drain: none
+    image: redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    environment:
+      PAPERMARK_CLOUD_REDIS_PASSWORD: ${PAPERMARK_CLOUD_REDIS_PASSWORD:?Run cloud environment generation first}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$PAPERMARK_CLOUD_REDIS_PASSWORD\""]
+    volumes: ["cloud-redis:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$PAPERMARK_CLOUD_REDIS_PASSWORD\" redis-cli ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 50
+  redis-rest:
+    restart: unless-stopped
+    stop_grace_period: 30s
+    labels:
+      resilience.drain: none
+    image: hiett/serverless-redis-http@sha256:65128347949bca511e448fd7238780d624573d74c22b79155a7563db19e9b678
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:?Run cloud environment generation first}
+      SRH_CONNECTION_STRING: redis://:${PAPERMARK_CLOUD_REDIS_PASSWORD}@redis:6379
+    depends_on:
+      redis: { condition: service_healthy }
+    ports: ["127.0.0.1:18080:80"]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 50
+  s3:
+    restart: unless-stopped
+    stop_grace_period: 30s
+    labels:
+      resilience.drain: none
+    profiles: [pdf]
+    image: chrislusf/seaweedfs@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    command: ["server", "-dir=/data", "-ip=s3", "-volume.max=8", "-master.volumeSizeLimitMB=64", "-s3", "-s3.port=8333", "-s3.config=/etc/cloud/s3.json"]
+    volumes:
+      - cloud-s3:/data
+      - ./.cloud/seaweed-s3.json:/etc/cloud/s3.json:ro
+    ports: ["127.0.0.1:18333:8333"]
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 100
+volumes:
+  cloud-postgres:
+  cloud-redis:
+  cloud-s3:

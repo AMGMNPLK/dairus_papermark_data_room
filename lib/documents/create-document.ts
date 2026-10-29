@@ -12,51 +12,15 @@ export type DocumentData = {
   enableExcelAdvancedMode?: boolean;
 };
 
-export const createDocument = async ({
-  documentData,
-  teamId,
-  numPages,
-  folderPathName,
-  createLink = false,
-  token,
-}: {
-  documentData: DocumentData;
-  teamId: string;
-  numPages?: number;
-  folderPathName?: string;
-  createLink?: boolean;
-  token?: string;
-}) => {
-  // create a document in the database with the blob url
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/teams/${teamId}/documents`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        name: documentData.name,
-        url: documentData.key,
-        storageType: documentData.storageType,
-        numPages: numPages,
-        folderPathName: folderPathName,
-        type: documentData.supportedFileType,
-        contentType: documentData.contentType,
-        createLink: createLink,
-        fileSize: documentData.fileSize,
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error);
-  }
-
-  return response;
-};
+import { takePendingFile } from "@/lib/files/put-file";
+async function privateUpload(documentData:DocumentData,documentId?:string,folderPathName?:string) {
+ const file=takePendingFile(documentData.key);
+ const params=new URLSearchParams();if(documentId)params.set("documentId",documentId);if(folderPathName)params.set("folderPathName",folderPathName);
+ const result=await fetch(`/api/upload?${params}`,{method:"POST",headers:{"Content-Type":"application/pdf","x-document-name":encodeURIComponent(file.name)},body:file});
+ const data=await result.json();if(!result.ok)throw new Error(data.message||"Upload failed");
+ return new Response(JSON.stringify({id:data.documentId,name:file.name,numPages:0,private:true}),{status:200,headers:{"Content-Type":"application/json"}});
+}
+export const createDocument=async({documentData,folderPathName}:any)=>privateUpload(documentData,undefined,folderPathName);
 
 export const createAgreementDocument = async ({
   documentData,
@@ -95,45 +59,4 @@ export const createAgreementDocument = async ({
 };
 
 // create a new version in the database
-export const createNewDocumentVersion = async ({
-  documentData,
-  documentId,
-  teamId,
-  numPages,
-}: {
-  documentData: DocumentData;
-  documentId: string;
-  teamId: string;
-  numPages?: number;
-}) => {
-  try {
-    const documentIdParsed = z.string().cuid().parse(documentId);
-
-    const response = await fetch(
-      `/api/teams/${teamId}/documents/${documentIdParsed}/versions`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          url: documentData.key,
-          storageType: documentData.storageType,
-          numPages: numPages,
-          type: documentData.supportedFileType,
-          contentType: documentData.contentType,
-          fileSize: documentData.fileSize,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return response;
-  } catch (error) {
-    console.error("Error creating new document version:", error);
-    throw new Error("Invalid document ID or team ID");
-  }
-};
+export const createNewDocumentVersion=async({documentData,documentId}:any)=>privateUpload(documentData,documentId);

@@ -77,11 +77,6 @@ export const VisitorAvatar = ({
         className,
       )}
     >
-      <AvatarImage
-        src={`https://gravatar.com/avatar/${generateGravatarHash(
-          viewerEmail,
-        )}?s=80&d=404`}
-      />
 
       <AvatarFallback
         className={`${getColorFromHash(

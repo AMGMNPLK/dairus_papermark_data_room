@@ -1,0 +1,8 @@
+On-screen text transcript — no spoken narration.
+00:00.000–00:02.400  Dairus
+00:02.400–00:04.800  Clear updates.
+00:04.800–00:07.200  Ready for review.
+00:00.000–00:07.200  Synthetic motion test · Private preview (persistent)
+
+Audio: three deterministic nonverbal chimes at00:00.000,00:02.400,00:04.800.
+This synthetic local render test makes no company, product, financial or investor-outcome claim.

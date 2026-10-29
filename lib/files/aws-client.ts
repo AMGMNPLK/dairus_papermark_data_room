@@ -2,9 +2,9 @@ import {
   type StorageConfig,
   getStorageConfig,
   getTeamStorageConfigById,
-} from "@/ee/features/storage/config";
+} from "@/lib/files/storage-config";
 import { LambdaClient } from "@aws-sdk/client-lambda";
-import { S3Client } from "@aws-sdk/client-s3";
+import { S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 
 export const getS3Client = (storageRegion?: string) => {
   const NEXT_PUBLIC_UPLOAD_TRANSPORT = process.env.NEXT_PUBLIC_UPLOAD_TRANSPORT;
@@ -16,6 +16,7 @@ export const getS3Client = (storageRegion?: string) => {
   const config = getStorageConfig(storageRegion);
 
   return new S3Client({
+    forcePathStyle: true,
     endpoint: config.endpoint || undefined,
     region: config.region,
     credentials: {
@@ -35,6 +36,7 @@ export const getS3ClientForTeam = async (teamId: string) => {
   const config = await getTeamStorageConfigById(teamId);
 
   return new S3Client({
+    forcePathStyle: true,
     endpoint: config.endpoint || undefined,
     region: config.region,
     credentials: {
@@ -87,7 +89,10 @@ export const getLambdaClientForTeam = async (teamId: string) => {
  * @param teamId - The team ID
  * @returns Promise<{ client: S3Client, config: StorageConfig }> - Both client and config
  */
-export const getTeamS3ClientAndConfig = async (teamId: string) => {
+export const getTeamS3ClientAndConfig = async (
+  teamId: string,
+  options: Pick<S3ClientConfig, "requestChecksumCalculation"> = {},
+) => {
   const NEXT_PUBLIC_UPLOAD_TRANSPORT = process.env.NEXT_PUBLIC_UPLOAD_TRANSPORT;
 
   if (NEXT_PUBLIC_UPLOAD_TRANSPORT !== "s3") {
@@ -97,6 +102,8 @@ export const getTeamS3ClientAndConfig = async (teamId: string) => {
   const config = await getTeamStorageConfigById(teamId);
 
   const client = new S3Client({
+    ...options,
+    forcePathStyle: true,
     endpoint: config.endpoint || undefined,
     region: config.region,
     credentials: {

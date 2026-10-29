@@ -26,13 +26,7 @@ export default function FileProcessStatusBar({
   onProcessingChange?: (processing: boolean) => void;
 }) {
   const [messageIndex, setMessageIndex] = useState(0);
-  const { data } = useSWRImmutable<{ publicAccessToken: string }>(
-    `/api/progress-token?documentVersionId=${documentVersionId}`,
-    fetcher,
-  );
-
-  const { status: progressStatus, error: progressError } =
-    useDocumentProgressStatus(documentVersionId, data?.publicAccessToken);
+  const { status: progressStatus, error: progressError } = useDocumentProgressStatus(documentVersionId);
 
   // Update processing state whenever status changes
   useEffect(() => {

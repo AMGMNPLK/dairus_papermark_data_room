@@ -59,8 +59,8 @@ interface View {
   documentName: string;
   linkName: string;
   viewedAt: Date;
-  totalDuration: number;
-  completionRate: number;
+  totalDuration: number | null;
+  completionRate: number | null;
   verified?: boolean;
   internal?: boolean;
   agreementResponse?: any;
@@ -196,7 +196,7 @@ const columns: ColumnDef<View>[] = [
     },
     cell: ({ row }) => (
       <div className="text-sm text-muted-foreground">
-        {durationFormat(row.original.totalDuration)}
+        {row.original.totalDuration == null ? "Not recorded" : durationFormat(row.original.totalDuration)}
       </div>
     ),
   },
@@ -227,11 +227,11 @@ const columns: ColumnDef<View>[] = [
     },
     cell: ({ row }) => (
       <div className="flex justify-start text-sm text-muted-foreground">
-        <Gauge
+        {row.original.completionRate == null ? "Not recorded" : <Gauge
           value={row.original.completionRate}
           size={"small"}
           showValue={true}
-        />
+        />}
       </div>
     ),
   },
@@ -330,8 +330,8 @@ export default function ViewsTable({
       "Visitor Email": view.viewerEmail || "Anonymous",
       Document: view.documentName,
       Link: view.linkName,
-      "Time Spent": durationFormat(view.totalDuration),
-      "Completion Rate": `${view.completionRate}%`,
+      "Time Spent": view.totalDuration == null ? "Not recorded" : durationFormat(view.totalDuration),
+      "Completion Rate": view.completionRate == null ? "Not recorded" : `${view.completionRate}%`,
       "Viewed At": new Date(view.viewedAt).toISOString(),
       Verified: view.verified ? "Yes" : "No",
     }));

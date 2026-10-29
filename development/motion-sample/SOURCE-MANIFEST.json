@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "syntheticOnly": true,
+  "sourceRevision": 3,
+  "exactOriginalSources": [
+    "index.html",
+    "motion.js",
+    "styles.css",
+    "generate-audio.py",
+    "timeline.json",
+    "captions.srt",
+    "transcript.txt",
+    "ASSET-PROVENANCE.json"
+  ],
+  "renderer": "official hyperframes 0.8.149; not bundled",
+  "runtimeMetadataChange": "Only package display name/description and matching lock root name were made portable; dependency versions, URLs and integrity records retained.",
+  "cloudRuntimeValidated": false,
+  "cloudRenderPerformed": false,
+  "generatedAssetsCommitted": false,
+  "privateDataIncluded": false,
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 105,
+      "sha256": "d9c952fce5c8161cc4f4e319612b7626f42d17e84599d5a7e60f296f04cb8794"
+    },
+    {
+      "path": "ASSET-PROVENANCE.json",
+      "bytes": 3049,
+      "sha256": "1b4fefdb38e2fdb0cbb209a2547b14a184776747665c5c5d45e036521ecf47f7"
+    },
+    {
+      "path": "README.md",
+      "bytes": 6500,
+      "sha256": "58dc963a1cfea008bb8d6695d3e5708912a50a811c7acc28be4eae6adee125a0"
+    },
+    {
+      "path": "assets/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "captions.srt",
+      "bytes": 138,
+      "sha256": "2a1037e1ca9b6d40946156cc5c9541357f1fd3736da23a615198089d1978f2dc"
+    },
+    {
+      "path": "generate-audio.py",
+      "bytes": 971,
+      "sha256": "9a9217fab762aecb136ef605da695eccaee7eb493edde35a18bb0c6ea9c7bfab"
+    },
+    {
+      "path": "index.html",
+      "bytes": 5628,
+      "sha256": "b9ed0434b936c635c6585b5638e479f6495b5a2dc6b5070addc5f1af3d4caacd"
+    },
+    {
+      "path": "motion.js",
+      "bytes": 3747,
+      "sha256": "d90f4e2a444c683e141f902bc3f7fc2f679cf9b7adc29c5cfdaeb5284a77eead"
+    },
+    {
+      "path": "runtime/HYPERFRAMES-LICENSE",
+      "bytes": 10763,
+      "sha256": "4259155fb06f127687ee7b0a8a3682d45132db0f2da26cbc0b7a2d1e796436b8"
+    },
+    {
+      "path": "runtime/package-lock.json",
+      "bytes": 62238,
+      "sha256": "ce88b0579549e46a72c71a711aed34b3216cf8d218b1f256678df01d84de247c"
+    },
+    {
+      "path": "runtime/package.json",
+      "bytes": 258,
+      "sha256": "ed0aaf576dd5953e21c0db6a36a5b88c6507576bd07873305d0402124c2bfb95"
+    },
+    {
+      "path": "styles.css",
+      "bytes": 1239,
+      "sha256": "47b2d88b41cabe3c097dbf68e4dcc8f8288783628047433703524f6e0dbd5424"
+    },
+    {
+      "path": "timeline.json",
+      "bytes": 1987,
+      "sha256": "83f8cc2239ae1c853c500bebde1aa43435ad89132f6675e966b7e7d60493b613"
+    },
+    {
+      "path": "transcript.txt",
+      "bytes": 412,
+      "sha256": "37889960683045b18733ea68d82eb566d4261d4a4e1865ce48a02b9e025c213f"
+    }
+  ]
+}

@@ -1,28 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { reportDeniedAccessAttempt } from "@/ee/features/access-notifications";
-import { getTeamStorageConfigById } from "@/ee/features/storage/config";
 // Import authOptions directly from the source
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import { ipAddress, waitUntil } from "@vercel/functions";
+import { authOptions } from "@/lib/core-auth";
+import { ipAddress } from "@vercel/functions";
 import { getServerSession } from "next-auth";
 
 import { hashToken } from "@/lib/api/auth/token";
 import { verifyPreviewSession } from "@/lib/auth/preview-auth";
 import { PreviewSession } from "@/lib/auth/preview-auth";
-import { sendOtpVerificationEmail } from "@/lib/emails/send-email-otp-verification";
-import { getFeatureFlags } from "@/lib/featureFlags";
 import { getFile } from "@/lib/files/get-file";
 import { newId } from "@/lib/id-helper";
-import { notifyDocumentView } from "@/lib/integrations/slack/events";
 import prisma from "@/lib/prisma";
 import { ratelimit } from "@/lib/redis";
-import { parseSheet } from "@/lib/sheet";
-import { recordLinkView } from "@/lib/tracking/record-link-view";
 import { CustomUser, WatermarkConfigSchema } from "@/lib/types";
-import { checkPassword, decryptEncrpytedPassword, log } from "@/lib/utils";
+import {
+  checkPassword,
+  decryptEncrpytedPassword,
+  log,
+} from "@/lib/core-view-utils";
 import { isEmailMatched } from "@/lib/utils/email-domain";
-import { generateOTP } from "@/lib/utils/generate-otp";
 import { LOCALHOST_IP } from "@/lib/utils/geo";
 import { checkGlobalBlockList } from "@/lib/utils/global-block-list";
 import { validateEmail } from "@/lib/utils/validate-email";
@@ -38,7 +34,7 @@ export async function POST(request: NextRequest) {
       userId,
       documentVersionId,
       documentName,
-      hasPages,
+      hasPages: _requestedHasPages,
       ownerId,
       ...data
     } = body as {
@@ -89,6 +85,7 @@ export async function POST(request: NextRequest) {
         id: true,
         name: true,
         documentId: true,
+        expiresAt: true,
         emailProtected: true,
         enableNotification: true,
         emailAuthenticated: true,
@@ -142,6 +139,20 @@ export async function POST(request: NextRequest) {
     if (link.deletedAt) {
       return NextResponse.json(
         { message: "Link has been deleted." },
+        { status: 404 },
+      );
+    }
+
+    // Enforce link scope and lifetime before returning any document bytes.
+    if (link.expiresAt && link.expiresAt <= new Date()) {
+      return NextResponse.json(
+        { message: "Link is no longer available." },
+        { status: 404 },
+      );
+    }
+    if (!link.documentId || link.documentId !== documentId) {
+      return NextResponse.json(
+        { message: "Document not found." },
         { status: 404 },
       );
     }
@@ -241,8 +252,6 @@ export async function POST(request: NextRequest) {
         );
       }
       if (globalBlockCheck.isBlocked) {
-        waitUntil(reportDeniedAccessAttempt(link, email, "global"));
-
         return NextResponse.json({ message: "Access denied" }, { status: 403 });
       }
 
@@ -255,8 +264,6 @@ export async function POST(request: NextRequest) {
 
         // Deny access if the email is not allowed
         if (!isAllowed) {
-          waitUntil(reportDeniedAccessAttempt(link, email, "allow"));
-
           return NextResponse.json(
             { message: "Unauthorized access" },
             { status: 403 },
@@ -273,8 +280,6 @@ export async function POST(request: NextRequest) {
 
         // Deny access if the email is denied
         if (isDenied) {
-          waitUntil(reportDeniedAccessAttempt(link, email, "deny"));
-
           return NextResponse.json(
             { message: "Unauthorized access" },
             { status: 403 },
@@ -286,43 +291,13 @@ export async function POST(request: NextRequest) {
       // 1) email verification is required and
       // 2) code is not provided or token not provided
       if (link.emailAuthenticated && !code && !token) {
-        const ipAddressValue = ipAddress(request);
-
-        const { success } = await ratelimit(10, "1 m").limit(
-          `send-otp:${ipAddressValue}`,
-        );
-        if (!success) {
-          return NextResponse.json(
-            { message: "Too many requests. Please try again later." },
-            { status: 429 },
-          );
-        }
-
-        await prisma.verificationToken.deleteMany({
-          where: {
-            identifier: `otp:${linkId}:${email}`,
+        // No email transport is compiled into the community PDF application.
+        return NextResponse.json(
+          {
+            message: "Email verification is unavailable in this installation.",
           },
-        });
-
-        const otpCode = generateOTP();
-        const expiresAt = new Date();
-        expiresAt.setMinutes(expiresAt.getMinutes() + 10); // token expires at 10 minutes
-
-        await prisma.verificationToken.create({
-          data: {
-            token: otpCode,
-            identifier: `otp:${linkId}:${email}`,
-            expires: expiresAt,
-          },
-        });
-
-        waitUntil(
-          sendOtpVerificationEmail(email, otpCode, false, link.teamId!),
+          { status: 503 },
         );
-        return NextResponse.json({
-          type: "email-verification",
-          message: "Verification email sent.",
-        });
       }
 
       if (link.emailAuthenticated && code) {
@@ -474,6 +449,28 @@ export async function POST(request: NextRequest) {
       isPreview = true;
     }
 
+    // The server decides which version and page representation can be shared.
+    const sharedVersion = await prisma.documentVersion.findFirst({
+      where: {
+        id: documentVersionId,
+        documentId: link.documentId,
+        // The community router pins an approved version per link before calling
+        // this handler. The original application retains its primary-version check.
+        ...(!isPreview &&
+          process.env.PAPERMARK_COMMUNITY_CORE !== "true" && {
+            isPrimary: true,
+          }),
+      },
+      select: { hasPages: true },
+    });
+    if (!sharedVersion) {
+      return NextResponse.json(
+        { message: "Document version not found." },
+        { status: 404 },
+      );
+    }
+    const hasPages = sharedVersion.hasPages;
+
     try {
       let viewer: { id: string; verified: boolean } | null = null;
       if (email && !isPreview) {
@@ -554,11 +551,7 @@ export async function POST(request: NextRequest) {
       let sheetData;
       // let documentPagesPromise, documentVersionPromise;
       if (hasPages) {
-        const featureFlags = await getFeatureFlags({
-          teamId: link.teamId!,
-        });
-        const inDocumentLinks =
-          !link.team?.plan.includes("free") || featureFlags.inDocumentLinks;
+        const inDocumentLinks = false;
 
         // get pages from document version
         console.time("get-pages");
@@ -616,63 +609,11 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        if (documentVersion.type === "sheet") {
-          if (useAdvancedExcelViewer) {
-            if (!documentVersion.file.includes("https://")) {
-              // Get team-specific storage config for advanced distribution host
-              const storageConfig = await getTeamStorageConfigById(
-                link.teamId!,
-              );
-              documentVersion.file = `https://${storageConfig.advancedDistributionHost}/${documentVersion.file}`;
-            }
-          } else {
-            const fileUrl = await getFile({
-              data: documentVersion.file,
-              type: documentVersion.storageType,
-            });
-
-            const data = await parseSheet({ fileUrl });
-            sheetData = data;
-          }
-        }
         console.timeEnd("get-file");
       }
 
-      const isPaused =
-        link.team?.pauseStartsAt && link.team?.pauseStartsAt <= new Date()
-          ? true
-          : false;
-
-      if (newView) {
-        // Record view in the background to avoid blocking the response
-        waitUntil(
-          // Record link view in Tinybird
-          recordLinkView({
-            req: request,
-            clickId: newId("linkView"),
-            viewId: newView.id,
-            linkId,
-            documentId,
-            teamId: link.teamId!,
-            enableNotification: link.enableNotification,
-            isPaused,
-          }),
-        );
-        if (!isPreview) {
-          waitUntil(
-            notifyDocumentView({
-              teamId: link.teamId!,
-              documentId,
-              linkId,
-              viewerEmail: email ?? undefined,
-              viewerId: viewer?.id ?? undefined,
-              teamIsPaused: isPaused,
-            }).catch((error) => {
-              console.error("Error sending Slack notification:", error);
-            }),
-          );
-        }
-      }
+      // Views are recorded only in the local database. No notifications,
+      // invitation, webhook, analytics or vendor background job is launched.
 
       // Determine if AI agents should be enabled (requires both team and document level)
       const agentsEnabled =

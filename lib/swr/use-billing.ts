@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import { useTeam } from "@/context/team-context";
 import { PLAN_NAME_MAP } from "@/ee/stripe/constants";
-import { SubscriptionDiscount } from "@/ee/stripe/functions/get-subscription-item";
+interface SubscriptionDiscount { couponId:string; percentOff?:number; amountOff?:number; duration:string; durationInMonths?:number; valid:boolean; end?:number; }
 import useSWR from "swr";
 
 import { fetcher } from "@/lib/utils";

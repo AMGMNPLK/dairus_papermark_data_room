@@ -11,7 +11,7 @@ interface DraggableItemProps {
   isSelected: boolean;
   onSelect: (id: string, type: "document" | "folder") => void;
   isDraggingSelected: boolean;
-  children: React.ReactElement;
+  children: React.ReactElement<{folder?: any;document?: any;isDragging?:boolean;isSelected?:boolean;isHovered?:boolean}>;
   type: "document" | "folder";
 }
 
@@ -30,16 +30,16 @@ export function DraggableItem({
       id: id,
       name:
         type === "folder"
-          ? children.props.folder.name
-          : children.props.document.name,
+          ? children.props.folder!.name
+          : children.props.document!.name,
       contentType:
         type === "folder"
-          ? children.props.folder.type
-          : children.props.document.type,
+          ? children.props.folder!.type
+          : children.props.document!.type,
       parentFolderId:
         type === "folder"
-          ? children.props.folder.parentId
-          : children.props.document.folderId,
+          ? children.props.folder!.parentId
+          : children.props.document!.folderId,
     },
   });
 

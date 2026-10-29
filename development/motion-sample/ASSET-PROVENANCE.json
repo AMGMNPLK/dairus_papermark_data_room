@@ -1,0 +1,84 @@
+{
+  "atUtc": "2026-10-11T20:25:58.399027+00:00",
+  "privateSyntheticOnly": true,
+  "softwareRuntime": {
+    "package": "hyperframes",
+    "version": "0.8.149",
+    "license": "Apache-2.0",
+    "redistributedInProject": false
+  },
+  "visualSource": "Original project CSS; restrained native Dairus/Papermark-style neutral palette and plain text only",
+  "font": {
+    "family": "Arial, Helvetica, sans-serif",
+    "source": "Renderer system font fallback",
+    "binaryCopied": false,
+    "fallbackNeedsRuntimeCheck": true
+  },
+  "audio": [
+    {
+      "path": "assets/cue-clarity.wav",
+      "sha256": "dc0659142c8ed21da5ea670255e4e59e2ab2910051f6ca2d3f949709610262ba",
+      "bytes": 92204,
+      "origin": "Generated locally by generate-audio.py; deterministic additive sine tones and bounded envelope; no sampled asset",
+      "rights": "Original test asset generated for this project; no third-party audio content",
+      "metadata": {
+        "sampleRate": 48000,
+        "channels": 2,
+        "sampleWidthBytes": 2,
+        "frames": 23040,
+        "duration": 0.48
+      }
+    },
+    {
+      "path": "assets/cue-identity.wav",
+      "sha256": "314f11a2ae270f60e1363a433b0c2678dfd242863a949563085c1371e5041a7e",
+      "bytes": 92204,
+      "origin": "Generated locally by generate-audio.py; deterministic additive sine tones and bounded envelope; no sampled asset",
+      "rights": "Original test asset generated for this project; no third-party audio content",
+      "metadata": {
+        "sampleRate": 48000,
+        "channels": 2,
+        "sampleWidthBytes": 2,
+        "frames": 23040,
+        "duration": 0.48
+      }
+    },
+    {
+      "path": "assets/cue-review.wav",
+      "sha256": "cf33397b6397ac9e739c31beca871207f5fda13b87fcc00be9515f73c46124f5",
+      "bytes": 119084,
+      "origin": "Generated locally by generate-audio.py; deterministic additive sine tones and bounded envelope; no sampled asset",
+      "rights": "Original test asset generated for this project; no third-party audio content",
+      "metadata": {
+        "sampleRate": 48000,
+        "channels": 2,
+        "sampleWidthBytes": 2,
+        "frames": 29760,
+        "duration": 0.62
+      }
+    }
+  ],
+  "speech": false,
+  "externalMedia": false,
+  "realInvestorContent": false,
+  "publicationApproved": false,
+  "renderPerformedByAuthor": false,
+  "authoringRevision": 3,
+  "adapterClock": "All WAAPI effects use absolute composition time; runtime and authored adapter assign the same milliseconds.",
+  "scriptRegistration": "Complete executable source embedded inline for pinned static lint; motion.js matches embedded script exactly and is not separately loaded.",
+  "contrastCorrection": {
+    "reportedBefore": {
+      "headerMetadata": 4.41,
+      "beatLabels": 4.36
+    },
+    "newColors": {
+      "headerMetadata": "#56647a",
+      "beatLabels": "#566880"
+    },
+    "calculatedRatiosOnCompositionBackground": {
+      "headerMetadata": 5.731694031258751,
+      "beatLabels": 5.439582210520077
+    },
+    "browserRecheck": "pending parent validation"
+  }
+}

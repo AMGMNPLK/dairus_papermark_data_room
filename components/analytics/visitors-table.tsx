@@ -53,7 +53,7 @@ interface Visitor {
   lastActive: Date;
   uniqueDocuments: number;
   verified: boolean;
-  totalDuration: number;
+  totalDuration: number | null;
   viewerName?: string | null;
 }
 
@@ -144,7 +144,7 @@ const columns: ColumnDef<Visitor>[] = [
     },
     cell: ({ row }) => (
       <div className="text-sm text-muted-foreground">
-        {durationFormat(row.original.totalDuration)}
+        {row.original.totalDuration == null ? "Not recorded" : durationFormat(row.original.totalDuration)}
       </div>
     ),
   },
@@ -270,7 +270,7 @@ export default function VisitorsTable({
       Email: visitor.email,
       "Total Views": visitor.totalViews,
       "Unique Documents": visitor.uniqueDocuments,
-      "Total Duration": durationFormat(visitor.totalDuration),
+      "Total Duration": visitor.totalDuration == null ? "Not recorded" : durationFormat(visitor.totalDuration),
       "Last Active": new Date(visitor.lastActive).toISOString(),
       Verified: visitor.verified ? "Yes" : "No",
     }));

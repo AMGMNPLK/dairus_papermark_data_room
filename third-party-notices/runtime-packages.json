@@ -1,0 +1,932 @@
+[
+  {
+    "path": "source-map-js",
+    "name": "source-map-js",
+    "version": "1.2.2",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "path": "cross-spawn",
+    "name": "cross-spawn",
+    "version": "7.0.6",
+    "license": "MIT"
+  },
+  {
+    "path": "baseline-browser-mapping",
+    "name": "baseline-browser-mapping",
+    "version": "2.11.28",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "oauth",
+    "name": "oauth",
+    "version": "0.9.15",
+    "license": "MIT"
+  },
+  {
+    "path": "is-stream",
+    "name": "is-stream",
+    "version": "2.0.1",
+    "license": "MIT"
+  },
+  {
+    "path": "openid-client",
+    "name": "openid-client",
+    "version": "5.6.5",
+    "license": "MIT"
+  },
+  {
+    "path": "bcryptjs",
+    "name": "bcryptjs",
+    "version": "3.0.3",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "path": "preact",
+    "name": "preact",
+    "version": "10.23.1",
+    "license": "MIT"
+  },
+  {
+    "path": "uncrypto",
+    "name": "uncrypto",
+    "version": "0.1.3",
+    "license": "MIT"
+  },
+  {
+    "path": "is-buffer",
+    "name": "is-buffer",
+    "version": "2.0.5",
+    "license": "MIT"
+  },
+  {
+    "path": "object-hash",
+    "name": "object-hash",
+    "version": "2.2.0",
+    "license": "MIT"
+  },
+  {
+    "path": "shebang-command",
+    "name": "shebang-command",
+    "version": "2.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": "isexe",
+    "name": "isexe",
+    "version": "2.0.0",
+    "license": "ISC"
+  },
+  {
+    "path": "bowser",
+    "name": "bowser",
+    "version": "2.14.1",
+    "license": "MIT"
+  },
+  {
+    "path": "shebang-regex",
+    "name": "shebang-regex",
+    "version": "3.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": "cookie",
+    "name": "cookie",
+    "version": "0.7.2",
+    "license": "MIT"
+  },
+  {
+    "path": "postcss",
+    "name": "postcss",
+    "version": "8.5.23",
+    "license": "MIT"
+  },
+  {
+    "path": "styled-jsx",
+    "name": "styled-jsx",
+    "version": "5.1.6",
+    "license": "MIT"
+  },
+  {
+    "path": "sonner",
+    "name": "sonner",
+    "version": "2.0.7",
+    "license": "MIT"
+  },
+  {
+    "path": "retry",
+    "name": "retry",
+    "version": "0.13.1",
+    "license": "MIT"
+  },
+  {
+    "path": "path-key",
+    "name": "path-key",
+    "version": "3.1.1",
+    "license": "MIT"
+  },
+  {
+    "path": "next",
+    "name": "next",
+    "version": "16.4.0",
+    "license": "MIT"
+  },
+  {
+    "path": "throttleit",
+    "name": "throttleit",
+    "version": "2.1.0",
+    "license": "MIT"
+  },
+  {
+    "path": "lru-cache",
+    "name": "lru-cache",
+    "version": "6.0.0",
+    "license": "ISC"
+  },
+  {
+    "path": "which",
+    "name": "which",
+    "version": "2.0.2",
+    "license": "ISC"
+  },
+  {
+    "path": "nanoid",
+    "name": "nanoid",
+    "version": "5.1.16",
+    "license": "MIT"
+  },
+  {
+    "path": "chrono-node",
+    "name": "chrono-node",
+    "version": "2.9.0",
+    "license": "MIT"
+  },
+  {
+    "path": "mupdf",
+    "name": "mupdf",
+    "version": "1.28.1",
+    "license": "AGPL-3.0-or-later"
+  },
+  {
+    "path": "caniuse-lite",
+    "name": "caniuse-lite",
+    "version": "1.0.30001761",
+    "license": "CC-BY-4.0"
+  },
+  {
+    "path": "oidc-token-hash",
+    "name": "oidc-token-hash",
+    "version": "5.0.3",
+    "license": "MIT"
+  },
+  {
+    "path": "clsx",
+    "name": "clsx",
+    "version": "2.1.1",
+    "license": "MIT"
+  },
+  {
+    "path": "merge-stream",
+    "name": "merge-stream",
+    "version": "2.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": "picocolors",
+    "name": "picocolors",
+    "version": "1.1.1",
+    "license": "ISC"
+  },
+  {
+    "path": "client-only",
+    "name": "client-only",
+    "version": "0.0.1",
+    "license": "MIT"
+  },
+  {
+    "path": "yallist",
+    "name": "yallist",
+    "version": "4.0.0",
+    "license": "ISC"
+  },
+  {
+    "path": "detect-libc",
+    "name": "detect-libc",
+    "version": "2.1.2",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "next-themes",
+    "name": "next-themes",
+    "version": "0.4.6",
+    "license": "MIT"
+  },
+  {
+    "path": "async-retry",
+    "name": "async-retry",
+    "version": "1.3.3",
+    "license": "MIT"
+  },
+  {
+    "path": "use-sync-external-store",
+    "name": "use-sync-external-store",
+    "version": "1.6.0",
+    "license": "MIT"
+  },
+  {
+    "path": "swr",
+    "name": "swr",
+    "version": "2.3.8",
+    "license": "MIT"
+  },
+  {
+    "path": "preact-render-to-string",
+    "name": "preact-render-to-string",
+    "version": "5.2.6",
+    "license": "MIT"
+  },
+  {
+    "path": "dequal",
+    "name": "dequal",
+    "version": "2.0.3",
+    "license": "MIT"
+  },
+  {
+    "path": "next-auth",
+    "name": "next-auth",
+    "version": "4.24.15",
+    "license": "ISC"
+  },
+  {
+    "path": "react-dom",
+    "name": "react-dom",
+    "version": "19.3.0",
+    "license": "MIT"
+  },
+  {
+    "path": "undici",
+    "name": "undici",
+    "version": "6.29.0",
+    "license": "MIT"
+  },
+  {
+    "path": "pdf-lib",
+    "name": "pdf-lib",
+    "version": "1.17.1",
+    "license": "MIT"
+  },
+  {
+    "path": "pako",
+    "name": "pako",
+    "version": "1.0.11",
+    "license": "(MIT AND Zlib)"
+  },
+  {
+    "path": "semver",
+    "name": "semver",
+    "version": "7.8.5",
+    "license": "ISC"
+  },
+  {
+    "path": "is-node-process",
+    "name": "is-node-process",
+    "version": "1.2.0",
+    "license": "MIT"
+  },
+  {
+    "path": "ms",
+    "name": "ms",
+    "version": "2.1.3",
+    "license": "MIT"
+  },
+  {
+    "path": "jose",
+    "name": "jose",
+    "version": "5.10.0",
+    "license": "MIT"
+  },
+  {
+    "path": "escape-string-regexp",
+    "name": "escape-string-regexp",
+    "version": "5.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": "nuqs",
+    "name": "nuqs",
+    "version": "2.8.6",
+    "license": "MIT"
+  },
+  {
+    "path": "tailwind-merge",
+    "name": "tailwind-merge",
+    "version": "2.6.0",
+    "license": "MIT"
+  },
+  {
+    "path": "react",
+    "name": "react",
+    "version": "19.3.0",
+    "license": "MIT"
+  },
+  {
+    "path": "@next/env",
+    "name": "@next/env",
+    "version": "16.4.0",
+    "license": "MIT"
+  },
+  {
+    "path": "@swc/helpers",
+    "name": "@swc/helpers",
+    "version": "0.5.23",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@prisma/client",
+    "name": "@prisma/client",
+    "version": "6.19.3",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@vercel/blob",
+    "name": "@vercel/blob",
+    "version": "2.8.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@vercel/cli-config",
+    "name": "@vercel/cli-config",
+    "version": "0.3.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@vercel/cli-exec",
+    "name": "@vercel/cli-exec",
+    "version": "1.0.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@vercel/cli-exec/node_modules/mimic-fn",
+    "name": "mimic-fn",
+    "version": "2.1.0",
+    "license": "MIT"
+  },
+  {
+    "path": "@vercel/cli-exec/node_modules/get-stream",
+    "name": "get-stream",
+    "version": "6.0.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@vercel/cli-exec/node_modules/strip-final-newline",
+    "name": "strip-final-newline",
+    "version": "2.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": "@vercel/cli-exec/node_modules/signal-exit",
+    "name": "signal-exit",
+    "version": "3.0.7",
+    "license": "ISC"
+  },
+  {
+    "path": "@vercel/cli-exec/node_modules/execa",
+    "name": "execa",
+    "version": "5.1.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@vercel/cli-exec/node_modules/npm-run-path",
+    "name": "npm-run-path",
+    "version": "4.0.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@vercel/cli-exec/node_modules/human-signals",
+    "name": "human-signals",
+    "version": "2.1.0",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@vercel/cli-exec/node_modules/onetime",
+    "name": "onetime",
+    "version": "5.1.2",
+    "license": "MIT"
+  },
+  {
+    "path": "@vercel/blob/node_modules/@vercel/oidc",
+    "name": "@vercel/oidc",
+    "version": "3.8.10",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@img/colour",
+    "name": "@img/colour",
+    "version": "1.1.0",
+    "license": "MIT"
+  },
+  {
+    "path": "@floating-ui/utils",
+    "name": "@floating-ui/utils",
+    "version": "0.2.8",
+    "license": "MIT"
+  },
+  {
+    "path": "@floating-ui/dom",
+    "name": "@floating-ui/dom",
+    "version": "1.6.8",
+    "license": "MIT"
+  },
+  {
+    "path": "@floating-ui/core",
+    "name": "@floating-ui/core",
+    "version": "1.6.5",
+    "license": "MIT"
+  },
+  {
+    "path": "@floating-ui/react-dom",
+    "name": "@floating-ui/react-dom",
+    "version": "2.1.2",
+    "license": "MIT"
+  },
+  {
+    "path": "pdf-lib/node_modules/tslib",
+    "name": "tslib",
+    "version": "1.14.1",
+    "license": "0BSD"
+  },
+  {
+    "path": "next-auth/node_modules/uuid",
+    "name": "uuid",
+    "version": "11.1.1",
+    "license": "MIT"
+  },
+  {
+    "path": "next-auth/node_modules/jose",
+    "name": "jose",
+    "version": "4.15.9",
+    "license": "MIT"
+  },
+  {
+    "path": "@upstash/ratelimit",
+    "name": "@upstash/ratelimit",
+    "version": "v2.0.7",
+    "license": "MIT"
+  },
+  {
+    "path": "@upstash/redis",
+    "name": "@upstash/redis",
+    "version": "v1.36.0",
+    "license": "MIT"
+  },
+  {
+    "path": "@upstash/core-analytics",
+    "name": "@upstash/core-analytics",
+    "version": "v0.0.10",
+    "license": "MIT"
+  },
+  {
+    "path": "@aws-sdk/nested-clients",
+    "name": "@aws-sdk/nested-clients",
+    "version": "3.997.46",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-web-identity",
+    "name": "@aws-sdk/credential-provider-web-identity",
+    "version": "3.972.78",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-env",
+    "name": "@aws-sdk/credential-provider-env",
+    "version": "3.972.72",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/token-providers",
+    "name": "@aws-sdk/token-providers",
+    "version": "3.1138.0",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-sso",
+    "name": "@aws-sdk/credential-provider-sso",
+    "version": "3.973.16",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/client-s3",
+    "name": "@aws-sdk/client-s3",
+    "version": "3.1147.0",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-node",
+    "name": "@aws-sdk/credential-provider-node",
+    "version": "3.972.84",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-http",
+    "name": "@aws-sdk/credential-provider-http",
+    "version": "3.972.74",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-process",
+    "name": "@aws-sdk/credential-provider-process",
+    "version": "3.972.72",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-ini",
+    "name": "@aws-sdk/credential-provider-ini",
+    "version": "3.973.17",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-login",
+    "name": "@aws-sdk/credential-provider-login",
+    "version": "3.972.79",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/checksums",
+    "name": "@aws-sdk/checksums",
+    "version": "3.1001.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/checksums/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-login/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-ini/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-process/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-http/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/client-s3/node_modules/@aws-sdk/xml-builder",
+    "name": "@aws-sdk/xml-builder",
+    "version": "3.972.41",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/client-s3/node_modules/@aws-sdk/middleware-sdk-s3",
+    "name": "@aws-sdk/middleware-sdk-s3",
+    "version": "3.972.77",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/client-s3/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/client-s3/node_modules/@aws-sdk/signature-v4-multi-region",
+    "name": "@aws-sdk/signature-v4-multi-region",
+    "version": "3.996.47",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-sso/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/token-providers/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-env/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/credential-provider-web-identity/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/nested-clients/node_modules/@aws-sdk/xml-builder",
+    "name": "@aws-sdk/xml-builder",
+    "version": "3.972.41",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/nested-clients/node_modules/@aws-sdk/core",
+    "name": "@aws-sdk/core",
+    "version": "3.978.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@aws-sdk/nested-clients/node_modules/@aws-sdk/signature-v4-multi-region",
+    "name": "@aws-sdk/signature-v4-multi-region",
+    "version": "3.996.47",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "next/dist/compiled/regenerator-runtime",
+    "name": "regenerator-runtime",
+    "version": "0.13.4",
+    "license": "MIT"
+  },
+  {
+    "path": "next/dist/compiled/react-refresh",
+    "name": "react-refresh",
+    "version": "0.12.0",
+    "license": "MIT"
+  },
+  {
+    "path": "next/dist/compiled/react-is",
+    "name": "react-is",
+    "version": "19.3.0-canary-278794d7-20261002",
+    "license": "MIT"
+  },
+  {
+    "path": "next/dist/compiled/@edge-runtime/ponyfill",
+    "name": "@edge-runtime/ponyfill",
+    "version": "4.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": "next/dist/compiled/@edge-runtime/primitives",
+    "name": "@edge-runtime/primitives",
+    "version": "6.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": "next/dist/compiled/@edge-runtime/cookies",
+    "name": "@edge-runtime/cookies",
+    "version": "6.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": "next/node_modules/sharp",
+    "name": "sharp",
+    "version": "0.35.5",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "next/node_modules/@img/sharp-linux-x64",
+    "name": "@img/sharp-linux-x64",
+    "version": "0.35.5",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "next/node_modules/@img/sharp-libvips-linux-x64",
+    "name": "@img/sharp-libvips-linux-x64",
+    "version": "1.3.4",
+    "license": "LGPL-3.0-or-later"
+  },
+  {
+    "path": "next/node_modules/@img/sharp-libvips-linuxmusl-x64",
+    "name": "@img/sharp-libvips-linuxmusl-x64",
+    "version": "1.3.4",
+    "license": "LGPL-3.0-or-later"
+  },
+  {
+    "path": "next/node_modules/@img/sharp-linuxmusl-x64",
+    "name": "@img/sharp-linuxmusl-x64",
+    "version": "0.35.5",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "postcss/node_modules/nanoid",
+    "name": "nanoid",
+    "version": "3.3.20",
+    "license": "MIT"
+  },
+  {
+    "path": "@panva/hkdf",
+    "name": "@panva/hkdf",
+    "version": "1.2.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@babel/runtime",
+    "name": "@babel/runtime",
+    "version": "7.27.0",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-dismissable-layer",
+    "name": "@radix-ui/react-dismissable-layer",
+    "version": "1.1.11",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-compose-refs",
+    "name": "@radix-ui/react-compose-refs",
+    "version": "1.1.2",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-use-layout-effect",
+    "name": "@radix-ui/react-use-layout-effect",
+    "version": "1.1.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-visually-hidden",
+    "name": "@radix-ui/react-visually-hidden",
+    "version": "1.2.3",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-primitive",
+    "name": "@radix-ui/react-primitive",
+    "version": "2.1.3",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-use-controllable-state",
+    "name": "@radix-ui/react-use-controllable-state",
+    "version": "1.2.2",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-tooltip",
+    "name": "@radix-ui/react-tooltip",
+    "version": "1.2.8",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-use-effect-event",
+    "name": "@radix-ui/react-use-effect-event",
+    "version": "0.0.2",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-use-escape-keydown",
+    "name": "@radix-ui/react-use-escape-keydown",
+    "version": "1.1.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-presence",
+    "name": "@radix-ui/react-presence",
+    "version": "1.1.5",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-id",
+    "name": "@radix-ui/react-id",
+    "version": "1.1.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-arrow",
+    "name": "@radix-ui/react-arrow",
+    "version": "1.1.7",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-popper",
+    "name": "@radix-ui/react-popper",
+    "version": "1.2.8",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-use-size",
+    "name": "@radix-ui/react-use-size",
+    "version": "1.1.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/primitive",
+    "name": "@radix-ui/primitive",
+    "version": "1.1.3",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-use-callback-ref",
+    "name": "@radix-ui/react-use-callback-ref",
+    "version": "1.1.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-context",
+    "name": "@radix-ui/react-context",
+    "version": "1.1.2",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-tooltip/node_modules/@radix-ui/react-portal",
+    "name": "@radix-ui/react-portal",
+    "version": "1.1.9",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-tooltip/node_modules/@radix-ui/react-slot",
+    "name": "@radix-ui/react-slot",
+    "version": "1.2.3",
+    "license": "MIT"
+  },
+  {
+    "path": "@radix-ui/react-primitive/node_modules/@radix-ui/react-slot",
+    "name": "@radix-ui/react-slot",
+    "version": "1.2.3",
+    "license": "MIT"
+  },
+  {
+    "path": "@pdf-lib/upng",
+    "name": "@pdf-lib/upng",
+    "version": "1.0.1",
+    "license": "MIT"
+  },
+  {
+    "path": "@pdf-lib/standard-fonts",
+    "name": "@pdf-lib/standard-fonts",
+    "version": "1.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": ".prisma/client",
+    "name": "prisma-client-f566d34ee2b1fb53b9b2e5ff2a3ab93fdf600293efa4f475d3f96f8b8d566c72",
+    "version": "6.19.3",
+    "license": null
+  },
+  {
+    "path": "openid-client/node_modules/jose",
+    "name": "jose",
+    "version": "4.15.9",
+    "license": "MIT"
+  },
+  {
+    "path": "@aws/lambda-invoke-store",
+    "name": "@aws/lambda-invoke-store",
+    "version": "0.3.0",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@sindresorhus/transliterate",
+    "name": "@sindresorhus/transliterate",
+    "version": "2.2.0",
+    "license": "MIT"
+  },
+  {
+    "path": "@sindresorhus/slugify",
+    "name": "@sindresorhus/slugify",
+    "version": "3.0.0",
+    "license": "MIT"
+  },
+  {
+    "path": "@smithy/credential-provider-imds",
+    "name": "@smithy/credential-provider-imds",
+    "version": "4.5.2",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@smithy/signature-v4",
+    "name": "@smithy/signature-v4",
+    "version": "5.7.4",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@smithy/core",
+    "name": "@smithy/core",
+    "version": "3.35.2",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@smithy/node-http-handler",
+    "name": "@smithy/node-http-handler",
+    "version": "4.12.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "path": "@smithy/types",
+    "name": "@smithy/types",
+    "version": "4.19.0",
+    "license": "Apache-2.0"
+  }
+]

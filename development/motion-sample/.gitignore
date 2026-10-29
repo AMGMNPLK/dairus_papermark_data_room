@@ -1,0 +1,10 @@
+runtime/node_modules/
+assets/*.wav
+.private/
+cache/
+frames-cache/
+renders/
+qc/
+__pycache__/
+*.pyc
+.venv/

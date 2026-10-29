@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "as_of_utc": "2026-10-29T13:35:19.022295+00:00",
+  "purpose": "Development dependency delta; not a replacement corresponding-source or licence inventory.",
+  "imported_deployed_baseline": {
+    "upstream_commit": "30916a85508293640f684238273663886f3c2c51",
+    "source_archive_sha256": "8b1bcfca13ec5bd8b09e4134d43c3f657e98b489981be3d40fdc52c92e04d11a",
+    "next": "16.4.0",
+    "eslint-config-next": "14.2.35",
+    "source_manifest_and_third_party_notices": "preserved historical baseline, not regenerated for this development dependency tree"
+  },
+  "updated_development_pins": {
+    "next": "16.4.3",
+    "eslint-config-next": "16.4.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "rationale_sources": [
+    "https://nextjs.org/blog/nextjs-security-update-october-14-2026",
+    "https://github.com/vercel/next.js/releases/tag/v16.4.3",
+    "https://registry.npmjs.org/next/16.4.3",
+    "https://registry.npmjs.org/eslint-config-next/16.4.3"
+  ],
+  "runtime_version_changes": [
+    {
+      "path": "node_modules/@next/env",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    },
+    {
+      "path": "node_modules/@next/swc-darwin-arm64",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    },
+    {
+      "path": "node_modules/@next/swc-darwin-x64",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    },
+    {
+      "path": "node_modules/@next/swc-linux-arm64-gnu",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    },
+    {
+      "path": "node_modules/@next/swc-linux-arm64-musl",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    },
+    {
+      "path": "node_modules/@next/swc-linux-x64-gnu",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    },
+    {
+      "path": "node_modules/@next/swc-linux-x64-musl",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    },
+    {
+      "path": "node_modules/@next/swc-win32-arm64-msvc",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    },
+    {
+      "path": "node_modules/@next/swc-win32-x64-msvc",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    },
+    {
+      "path": "node_modules/next",
+      "before": "16.4.0",
+      "after": "16.4.3",
+      "license_from_lock_metadata": "MIT"
+    }
+  ],
+  "audit_after_patch": {
+    "complete_tree": {
+      "info": 0,
+      "low": 1,
+      "moderate": 6,
+      "high": 13,
+      "critical": 0,
+      "total": 20
+    },
+    "production_tree": {
+      "info": 0,
+      "low": 1,
+      "moderate": 1,
+      "high": 6,
+      "critical": 0,
+      "total": 8
+    },
+    "meaning": "Dependency-tree findings only; actual route reachability not certified."
+  },
+  "known_lint_gap": "eslint-config-next16.4.3 declares eslint>=9; existing ESLint8.57.0 retained. No lint migration/pass claimed.",
+  "before_any_deployment": [
+    "Review/remediate applicable remaining vulnerabilities and verify compatibility.",
+    "Regenerate runtime package/licence inventories/notices for the actual build.",
+    "Create a complete matching corresponding-source offer; old deployed archive is not the patched source offer.",
+    "Rerun build/browser/security tests; obtain separate deployment/publication approvals."
+  ],
+  "production_or_service_mutation": false
+}

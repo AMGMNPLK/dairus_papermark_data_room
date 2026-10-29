@@ -78,7 +78,7 @@ export default function DataroomCard({ dataroom }: DataroomCardProps) {
       router.push(`/datarooms/${dataroom.id}/documents`);
     } else if (!isActive) {
       // If has documents but inactive, go to permissions/share
-      router.push(`/datarooms/${dataroom.id}/permissions`);
+      router.push(`/datarooms/${dataroom.id}/documents`);
     }
   };
 
@@ -106,7 +106,7 @@ export default function DataroomCard({ dataroom }: DataroomCardProps) {
                           isActive ? "text-green-600" : "text-gray-500"
                         }`}
                       >
-                        {isActive ? "Active" : "Inactive"}
+                        {isActive ? "Active" : "Private"}
                       </span>
                     </div>
                   </TooltipTrigger>
@@ -222,11 +222,11 @@ export default function DataroomCard({ dataroom }: DataroomCardProps) {
                           className="h-8 gap-2 text-muted-foreground hover:text-foreground"
                           onClick={handleButtonClick}
                         >
-                          <span>Share</span>
+                          <span>Manage Documents</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Share dataroom</p>
+                        <p>Organize private documents</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

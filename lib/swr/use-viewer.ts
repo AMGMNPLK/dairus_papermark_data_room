@@ -21,7 +21,7 @@ type ViewerWithViews = {
       type: string | null;
       contentType: string | null;
     };
-    totalDuration: number;
+    totalDuration: number | null;
   }[];
   pagination?: {
     currentPage: number;
@@ -66,7 +66,7 @@ export default function useViewer(
     }
   );
 
-  const shouldFetchDurations = (viewer?.views?.length ?? 0) > 0;
+  const shouldFetchDurations = false; // No hosted duration warehouse; never fabricate time spent.
 
   const { data: durationsResponse, isLoading: loadingDurations, error: durationsError } = useSWR<{ durations: Record<string, number> }>(
     shouldFetchDurations

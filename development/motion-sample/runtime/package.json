@@ -1,0 +1,12 @@
+{
+  "name": "private-synthetic-motion-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned local-only synthetic motion development runtime",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "hyperframes": "0.8.149"
+  }
+}

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { useLimits } from "@/ee/limits/swr-handler";
+import { useLimits } from "@/lib/swr/use-limits";
 import { PlanEnum } from "@/ee/stripe/constants";
 import { ChevronsUpDown, UserRoundPlusIcon } from "lucide-react";
 import { usePlan } from "@/lib/swr/use-billing";
