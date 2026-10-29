@@ -3,6 +3,7 @@ import useSWR from "swr";
 import { PlusIcon, TrashIcon } from "lucide-react";
 
 import AppLayout from "@/components/layouts/app";
+import { importMonthlyHandoff } from "../server/monthly/handoff-import.mjs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -17,12 +18,14 @@ type Evidence = {
   date: string;
   reference: string;
   sha256: string;
+  versionId?: string;
 };
 type Claim = {
   id: string;
   text: string;
   review: ("finance" | "legal")[];
   evidence: Evidence[];
+  provenance?: unknown;
 };
 type Content = {
   title: string;
@@ -36,6 +39,7 @@ type Content = {
     notifications: false;
   };
   gaps: string[];
+  provenance?: unknown;
 };
 type Candidate = {
   id: string;
@@ -123,6 +127,11 @@ export default function MonthlyPage() {
   const [dirty, setDirty] = useState(drafts[period]?.dirty || false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [handoff, setHandoff] = useState<{
+    period: string;
+    content: Content;
+  } | null>(null);
+  const [handoffMessage, setHandoffMessage] = useState("");
   useEffect(() => {
     if (!data || data.period !== period || drafts[period]?.dirty) return;
     const next = data.candidate?.content || empty();
@@ -150,6 +159,24 @@ export default function MonthlyPage() {
     setContent(drafts[next]?.content || empty());
     setDirty(drafts[next]?.dirty || false);
     setMessage("");
+    setHandoff(null);
+    setHandoffMessage("");
+  }
+  async function chooseHandoff(file: File | undefined) {
+    setHandoff(null);
+    setHandoffMessage("");
+    if (!file) return;
+    const selectedPeriod = period;
+    try {
+      if (file.size > 1024 * 1024)
+        throw new Error("Handoff exceeds the size limit");
+      const draft = importMonthlyHandoff(await file.text(), selectedPeriod);
+      setHandoff({ period: selectedPeriod, content: draft });
+    } catch (e) {
+      setHandoffMessage(
+        e instanceof Error ? e.message : "The handoff could not be read.",
+      );
+    }
   }
   function editClaim(index: number, next: Claim) {
     edit({
@@ -318,6 +345,64 @@ export default function MonthlyPage() {
                       inspected before claims can be treated as complete. An
                       empty finance query is missing coverage, not zero revenue.
                     </p>
+                    <div className="space-y-3 rounded-md border p-4">
+                      <h3 className="font-medium">
+                        Import a private preparation handoff
+                      </h3>
+                      <p>
+                        Choose a monthly-preparation/v1 JSON file for this
+                        month. It is unsigned input; source coverage and
+                        evidence still require verification. Loading it replaces
+                        the current draft only after you choose the button
+                        below. Nothing is saved or published automatically.
+                      </p>
+                      <Label htmlFor="handoff">Preparation file</Label>
+                      <Input
+                        id="handoff"
+                        type="file"
+                        accept="application/json,.json"
+                        onChange={(e) => {
+                          void chooseHandoff(e.currentTarget.files?.[0]);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                      {handoffMessage && (
+                        <p role="alert" className="text-destructive">
+                          {handoffMessage}
+                        </p>
+                      )}
+                      {handoff && handoff.period === period && (
+                        <div className="space-y-2">
+                          <p>
+                            {handoff.content.claims.length} claims and{" "}
+                            {handoff.content.gaps.length} gaps found. Audience
+                            and expiry must be supplied separately.
+                          </p>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              edit(handoff.content);
+                              setHandoff(null);
+                              setHandoffMessage(
+                                "Handoff loaded as an unsaved draft. Review its gaps, audience and expiry before saving.",
+                              );
+                            }}
+                          >
+                            Load handoff and replace current draft
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    {content.provenance != null && (
+                      <details>
+                        <summary className="cursor-pointer font-medium">
+                          Imported coverage and provenance
+                        </summary>
+                        <pre className="mt-2 overflow-auto whitespace-pre-wrap break-words rounded-md border p-3 text-xs">
+                          {JSON.stringify(content.provenance, null, 2)}
+                        </pre>
+                      </details>
+                    )}
                     <Label htmlFor="gaps">Known gaps, one per line</Label>
                     <Textarea
                       id="gaps"
@@ -450,6 +535,16 @@ export default function MonthlyPage() {
                           })
                         }
                       />
+                      {claim.provenance != null && (
+                        <details>
+                          <summary className="cursor-pointer text-sm font-medium">
+                            Source lineage and imported gaps
+                          </summary>
+                          <pre className="mt-2 overflow-auto whitespace-pre-wrap break-words rounded-md border p-3 text-xs">
+                            {JSON.stringify(claim.provenance, null, 2)}
+                          </pre>
+                        </details>
+                      )}
                       <fieldset className="space-y-2">
                         <legend className="text-sm font-medium">
                           Specialist review needed
@@ -514,6 +609,28 @@ export default function MonthlyPage() {
                               />
                             </div>
                           ))}
+                          <div className="space-y-2">
+                            <Label htmlFor={`evidence-${i}-${j}-version`}>
+                              Private PDF version ID (optional for draft)
+                            </Label>
+                            <Input
+                              id={`evidence-${i}-${j}-version`}
+                              value={item.versionId || ""}
+                              onChange={(e) => {
+                                const value = e.currentTarget.value;
+                                editClaim(i, {
+                                  ...claim,
+                                  evidence: claim.evidence.map((v, n) => {
+                                    if (n !== j) return v;
+                                    const { versionId: _old, ...rest } = v;
+                                    return value
+                                      ? { ...rest, versionId: value }
+                                      : rest;
+                                  }),
+                                });
+                              }}
+                            />
+                          </div>
                           <Button
                             variant="ghost"
                             size="sm"
