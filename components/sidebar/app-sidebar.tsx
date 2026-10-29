@@ -15,6 +15,7 @@ import {
   ContactIcon,
   FolderIcon,
   MailIcon,
+  CalendarDaysIcon,
   HouseIcon,
   Loader,
   PauseCircleIcon,
@@ -121,6 +122,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         current:
           router.pathname.includes("documents") &&
           !router.pathname.includes("datarooms"),
+      },
+      {
+        title: "Monthly workspace",
+        url: "/monthly",
+        icon: CalendarDaysIcon,
+        current: router.pathname === "/monthly",
       },
       {
         title: "Investor updates",
